@@ -1,4 +1,3 @@
-extern crate glutin;
 
 use glutin::PossiblyCurrent;
 use std::ffi::CStr;
@@ -8,6 +7,7 @@ pub(crate) mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
+#[allow(non_upper_case_globals)]
 static mut gl_context: Option<gl::Gl> = None;
 
 pub(crate) fn load_opengl(context: &glutin::Context<PossiblyCurrent>) {
@@ -46,5 +46,17 @@ pub(crate) fn gl_bind_array_buffer(id: u32) {
 pub(crate) fn gl_gen_buffer() -> u32 {
     let mut id = unsafe { std::mem::zeroed() };
     unsafe { opengl().GenBuffers(1, &mut id) };
+    id
+}
+
+pub(crate) fn gl_delete_buffer(id: u32) {
+    unsafe {
+        opengl().DeleteBuffers(1, &id);
+    }
+}
+
+pub(crate) fn gl_gen_texture() -> u32 {
+    let mut id = unsafe { std::mem::zeroed() };
+    unsafe { opengl().GenTextures(1, &mut id) };
     id
 }

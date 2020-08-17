@@ -1,4 +1,3 @@
-
 use crate::opengl::*;
 use std::mem;
 
@@ -13,6 +12,7 @@ pub enum DataType {
     Float = gl::FLOAT as isize
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum DrawPrimitive {
     Points = gl::POINTS as isize,
     Lines = gl::LINES as isize,
@@ -23,12 +23,14 @@ pub enum DrawPrimitive {
     Quads = gl::QUADS as isize,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum DrawUsage {
     Static = gl::STATIC_DRAW as isize, 
     Dynamic = gl::DYNAMIC_DRAW as isize, 
     Stream = gl::STREAM_DRAW as isize
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum BufferAccess {
     ReadOnly = gl::READ_ONLY as isize,
     WriteOnly = gl::WRITE_ONLY as isize,
@@ -43,6 +45,56 @@ pub struct VertexAttribute {
     pub dtype: DataType,
     pub offset: usize,
     pub stride: usize
+}
+
+pub struct ElementBuffer {
+    id: u32,
+    count: usize
+}
+
+impl ElementBuffer {
+    pub fn new(indicies: Vec<u32>) -> Self {
+        ElementBuffer::new_with_draw(indicies, DrawUsage::Static)
+    }
+
+    pub fn new_with_draw(indicies: Vec<u32>, usage: DrawUsage) -> Self {
+        let eb = ElementBuffer {
+            id: gl_gen_buffer(),
+            count: indicies.len()
+        };
+        eb.bind();
+
+        unsafe {
+            opengl().BufferData(gl::ELEMENT_ARRAY_BUFFER, (eb.count * mem::size_of::<u32>()) as isize, indicies.as_ptr() as *const _, usage as u32)
+        }
+        eb
+    }
+
+    pub fn new_quad(count: u32) -> Self {
+        let mut indicies: Vec<u32> = vec![0, count];
+        let itr_range = 0..(indicies.len() / 6);
+
+        for i in itr_range {
+            let quad_index = i * 6;
+            let vert_index = (i * 4) as u32;
+
+            indicies[quad_index + 0] = vert_index + 0;
+            indicies[quad_index + 1] = vert_index + 1;
+            indicies[quad_index + 2] = vert_index + 2;
+
+            indicies[quad_index + 3] = vert_index + 3;
+            indicies[quad_index + 4] = vert_index + 4;
+            indicies[quad_index + 5] = vert_index + 5;
+        }
+
+        ElementBuffer::new(indicies)
+    }
+
+    pub fn bind(&self) {
+        unsafe {
+            opengl().BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.id)
+        }
+    }
 }
 
 pub struct RenderBuffer {
@@ -200,6 +252,41 @@ impl VertexArray {
         gl_bind_vertex_array(self.id);
     }
 
+}
+
+impl Drop for ElementBuffer {
+
+    fn drop(&mut self) { 
+        gl_delete_buffer(self.id);
+    }
+}
+
+impl Drop for RenderBuffer {
+
+    fn drop(&mut self) { 
+        unsafe { opengl().DeleteRenderbuffers(1, &self.id) }
+    }
+}
+
+impl Drop for FrameBuffer {
+
+    fn drop(&mut self) { 
+        unsafe { opengl().DeleteFramebuffers(1, &self.id) }
+    }
+}
+
+impl Drop for VertexBuffer {
+
+    fn drop(&mut self) { 
+        gl_delete_buffer(self.id)
+    }
+}
+
+impl Drop for VertexArray {
+    
+    fn drop(&mut self) { 
+        gl_delete_buffer(self.id)
+    }
 }
 
 pub fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {

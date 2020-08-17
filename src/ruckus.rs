@@ -1,5 +1,11 @@
+extern crate glutin;
+extern crate image;
+
 mod opengl;
 mod buffers;
+mod graphics;
+mod math;
+
 use buffers::VertexArray;
 
 pub struct Renderer {
