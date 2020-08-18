@@ -1,12 +1,21 @@
-use crate::buffers::DataType;
-use std::ops::*;
-use std::collections::HashMap;
-use image::{open, DynamicImage};
-use image::imageops::flip_vertical;
 use crate::opengl::*;
-use crate::math::{Vec2ui, Vec2i};
+use crate::buffers::*;
+use crate::sys::*;
+use std::ops::*;
+use num::Num;
+use nalgebra_glm as glm;
 
-// TODO :: Implement Shader and Mesh here
+use std::collections::HashMap;
+
+#[allow(unused_imports)]
+use image::{open, DynamicImage};
+
+use image::imageops::flip_vertical;
+
+// TODO :: Implement Mesh here
+
+pub trait NumDefault: Num + Default + Copy{}
+impl <T: Num + Default + Copy> NumDefault for T {}
 
 #[derive(Debug, Copy, Clone)]
 pub enum TextureFormat {
@@ -18,7 +27,7 @@ pub enum TextureFormat {
 pub struct Texture {
     id: u32,
     unit: u32,
-    size: Vec2ui
+    size: glm::TVec2<u32>
 }
 
 impl Texture {
@@ -45,7 +54,7 @@ impl Texture {
         let gl = opengl();
         let mut t = Texture { 
             id: gl_gen_texture(), 
-            unit: 0, size: Vec2ui::default() 
+            unit: 0, size: glm::vec2(0, 0)
         };
         t.bind();
 
@@ -57,7 +66,7 @@ impl Texture {
         }
         
         t.unit = gl::TEXTURE0;
-        t.size = Vec2ui::new(w, h);
+        t.size = glm::vec2(w,h);
         
         unsafe {
             gl.TexImage2D(gl::TEXTURE_2D, 0, 
@@ -84,12 +93,14 @@ impl Texture {
         self.unit = gl::TEXTURE0 + unit_num;
     }
 
-    pub fn write(&self, offset: Vec2i, w: i32, h: i32, format: TextureFormat, dtype: DataType, data: Vec<u8>) {
+    pub fn write(&self, offset: glm::TVec2<i32>, w: i32, h: i32, format: TextureFormat, dtype: DataType, data: Vec<u8>) {
         self.bind();
         unsafe {
             opengl().TexSubImage2D(gl::TEXTURE_2D, 0, offset.x, offset.y, w, h, format as u32, dtype as u32, data.as_ptr() as *const _);
         }
     }
+
+    pub fn id(&self) -> u32 { self.id }
 
     pub fn bind(&self) {
         unsafe { opengl().BindTexture(gl::TEXTURE_2D, self.id) }
@@ -239,28 +250,35 @@ impl Shader {
     pub fn from_template(position: &str, effect: &str) -> Result<Self, String> {
         let vert_full = Shader::concat_shader_sources(VERT_TEMPLATE_DECLS, position, VERT_TEMPLATE_MAIN);
         let frag_full = Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, effect, FRAG_TEMPLATE_MAIN);
-        let mut s = Shader::from_memory(&vert_full, &frag_full)?;
-        Shader::fill_template_uniforms(&mut s);
+        let s = Shader::from_memory_with_template_uniforms(&vert_full, &frag_full)?;
         Ok(s)
     }
 
     pub fn from_vert_template(position: &str) -> Result<Self, String> {
         let vert_full = Shader::concat_shader_sources(VERT_TEMPLATE_DECLS, position, VERT_TEMPLATE_MAIN);
         let frag_full = DEFAULT_FRAG;
-        let mut s = Shader::from_memory(&vert_full, &frag_full)?;
-        Shader::fill_template_uniforms(&mut s);
+        let s = Shader::from_memory_with_template_uniforms(&vert_full, &frag_full)?;
         Ok(s)
     }
     pub fn from_frag_template(effect: &str) -> Result<Self, String> {
         let vert_full = DEFAULT_VERT;
         let frag_full = Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, effect, FRAG_TEMPLATE_MAIN);
-        let mut s = Shader::from_memory(&vert_full, &frag_full)?;
-        Shader::fill_template_uniforms(&mut s);
+        let s = Shader::from_memory_with_template_uniforms(&vert_full, &frag_full)?;
         Ok(s)
     }
     
-    pub fn from_template_instanced(vert: &str, frag: &str) -> Result<Self, String> {
-        unimplemented!("Instancing in shaders not yet supported");
+    pub fn from_template_instanced(position: Option<&str>, effect: Option<&str>) -> Result<Self, String> {
+        assert!(position.is_some() || effect.is_some(), "One of the arguments for function from_template_instanced() is None. Please pass at least 1 value with Some");
+        let vert_full = match position {
+            Some(s) => Shader::concat_shader_sources(VERT_TEMPLATE_DECLS_INSTANCED, s, VERT_TEMPLATE_MAIN),
+            None => String::from(DEFAULT_INSTANCED_VERT)
+        };
+        let frag_full = match effect {
+            Some(s) => Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, s, FRAG_TEMPLATE_MAIN),
+            None => String::from(DEFAULT_FRAG)
+        };
+        let s = Shader::from_memory_with_template_uniforms(&vert_full, &frag_full)?;
+        Ok(s)
     }
 
     pub fn set_uniform_4f(&self, name: &str, floats: (f32, f32, f32, f32)) {
@@ -288,9 +306,14 @@ impl Shader {
         gl_set_uniform_i(self.uniform_locations[name], n);
     }
 
-    pub fn set_uniform_matrix(&self) {
+    pub fn set_uniform_matrix(&self, name: &str, mat: &glm::Mat4) {
+        self.set_uniform_matrix_xpose(name, mat, false)
+        
+    }
+
+    pub fn set_uniform_matrix_xpose(&self, name: &str, mat: &glm::Mat4, transpose: bool) {
         self.bind();
-        unimplemented!("Matrix Operations not yet implemented");
+        gl_set_uniform_matrix_xpose(self.uniform_locations[name], glm::value_ptr(mat), transpose)
     }
 
     pub fn register_uniform(&mut self, name: &str) {
@@ -307,9 +330,11 @@ impl Shader {
         Shader { id, uniform_locations: HashMap::new() }
     }
 
-    fn fill_template_uniforms(s: &mut Shader) {
+    fn from_memory_with_template_uniforms(vert: &str, frag: &str) -> Result<Self, String> {
+        let mut s = Shader::from_memory(vert, frag)?;
         s.register_uniform("u_matrixMVP");
         s.register_uniform("u_modelMatrix");
+        Ok(s)
     }
 
     fn concat_shader_sources(a: &str, b: &str, c: &str) -> String {
@@ -317,6 +342,104 @@ impl Shader {
         result.push_str(b);
         result.push_str(c); 
         result
+    }
+}
+
+
+// TODO :: Finish this. --  Depends on: Vertex2D
+pub struct Mesh {
+    vbo: VertexBuffer,
+    ebo: Option<ElementBuffer>,
+    texture: Option<Texture>,
+
+    shader: Option<Shader>,
+    prim_type: DrawPrimitive
+}
+
+impl Mesh {
+    fn new() {
+
+    }
+}
+
+pub const UP_VECTOR: (f32, f32, f32) = (0., 1., 0.);
+pub const FORWARD_VECTOR: (f32, f32, f32) = (0., 0., 1.);
+
+pub trait IntoVec3f {
+    fn into_vec3(&self) -> glm::Vec3;
+}
+
+impl IntoVec3f for (f32, f32, f32) {
+    fn into_vec3(&self) -> glm::Vec3 { 
+        glm::vec3(self.0, self.1, self.2)
+    }
+}
+
+#[repr(C)] #[derive(Copy, Clone, Default)] pub struct Vert2DPosition { pub x: f32, pub y: f32, pub z: f32 }
+#[repr(C)] #[derive(Copy, Clone, Default)] pub struct Vert2DTextureCoord { pub u: f32, pub v: f32 }
+#[repr(C)] #[derive(Copy, Clone, Default)] pub struct Vert2DColor { pub r: f32, pub g: f32, pub b: f32, pub a: f32 }
+#[repr(C)] #[derive(Copy, Clone, Default)] pub struct Vertex2D {
+    pub position: Vert2DPosition,
+    pub text_coord: Vert2DTextureCoord,
+    pub color: Vert2DColor
+}
+
+pub trait Vertex2DSliceOps {
+    fn set_color(&mut self, color: &glm::Vec4);
+    fn translate(&mut self, mat: &glm::Mat4);
+    fn calc_texture_coords(&mut self, texture_rect: &Rectui, texture_size: glm::Vec2);
+    /** 
+     * Flips given verts tex coordinates along vertical (y) axis. Assumes
+     * coordinates are NDC
+    */
+    fn flip_texture_coords_vert(&mut self, min: f32, max: f32);
+}
+
+// TODO :: Finish this... Ideally we want to be able to use these functions on slices or arrays of Vertex2D,
+//         I am going to mess with the trait system a little bit, not sure what best practice for this is. Worst case just
+//         use free functions... its way easier that way
+impl<T> Vertex2DSliceOps for [T] where T: Vertex2DSliceOps {
+    
+    fn set_color(&mut self, color: &glm::Vec4) {
+        for i in self.into_iter() {
+            
+        }
+        self.translate(&glm::mat4(0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.));
+    }
+
+    fn translate(&mut self, _: &glm::Mat4) {
+        todo!() 
+    }
+
+    fn calc_texture_coords(&mut self, _: &Rect<u32>, _: glm::Vec2) {
+        todo!() 
+    }
+
+    fn flip_texture_coords_vert(&mut self, _: f32, _: f32) {
+        todo!() 
+    }
+
+}
+
+impl Vertex2D {
+    pub const fn new() -> Self {
+
+
+        Vertex2D { position: Vert2DPosition { x: 0., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 0. }, color: Vert2DColor { r: 0., g: 0., b: 0., a: 0. } }      
+    }
+ 
+    pub fn as_slice(&self) -> &[f32; 9] {
+        unsafe { std::mem::transmute(self) }
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [f32; 9] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+impl Vert2DColor {
+    pub const fn white() -> Self {
+        Vert2DColor { r: 1., g: 1., b: 1., a: 1. }
     }
 }
 

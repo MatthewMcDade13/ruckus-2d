@@ -1,8 +1,8 @@
 
 use glutin::PossiblyCurrent;
 use std::ffi::CStr;
-use crate::buffers::VertexArray;
-use crate::graphics::{ShaderType, Shader};
+use crate::sys::read_file;
+use crate::graphics::{ShaderType};
 
 pub(crate) mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
@@ -11,6 +11,7 @@ pub(crate) mod gl {
 #[allow(non_upper_case_globals)]
 static mut gl_context: Option<gl::Gl> = None;
 
+#[allow(dead_code)]
 pub(crate) fn load_opengl(context: &glutin::Context<PossiblyCurrent>) {
 
     let gl = gl::Gl::load_with(|ptr| context.get_proc_address(ptr) as *const _);
@@ -36,56 +37,86 @@ pub(crate) fn opengl() -> &'static gl::Gl {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_bind_vertex_array(id: u32) {
     unsafe { opengl().BindVertexArray(id) };
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_bind_array_buffer(id: u32) {
     unsafe { opengl().BindBuffer(gl::ARRAY_BUFFER, id) }
 }
 
+#[allow(dead_code)]
+pub(crate) fn gl_gen_vertex_array() -> u32 {
+    unsafe {
+        let mut id = std::mem::zeroed();
+        opengl().GenVertexArrays(1, &mut id);
+        id
+    }
+}
+
+#[allow(dead_code)]
 pub(crate) fn gl_gen_buffer() -> u32 {
     let mut id = unsafe { std::mem::zeroed() };
     unsafe { opengl().GenBuffers(1, &mut id) };
     id
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_delete_buffer(id: u32) {
     unsafe {
         opengl().DeleteBuffers(1, &id);
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_gen_texture() -> u32 {
     let mut id = unsafe { std::mem::zeroed() };
     unsafe { opengl().GenTextures(1, &mut id) };
     id
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_get_uniform_location(shader_id: u32, name: &str) -> i32 {
     unsafe { opengl().GetUniformLocation(shader_id, name.as_ptr() as *const _) }
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_set_uniform_4f(location: i32, floats: (f32, f32, f32, f32)) {
     unsafe { opengl().Uniform4f(location, floats.0, floats.1, floats.2, floats.3) }
 }
+
+#[allow(dead_code)]
 pub(crate) fn gl_set_uniform_3f(location: i32, floats: (f32, f32, f32)) {
     unsafe { opengl().Uniform3f(location, floats.0, floats.1, floats.2) }
 }
+
+#[allow(dead_code)]
 pub(crate) fn gl_set_uniform_2f(location: i32, floats: (f32, f32)) {
     unsafe { opengl().Uniform2f(location, floats.0, floats.1) }
 }
+
+#[allow(dead_code)]
 pub(crate) fn gl_set_uniform_f(location: i32, n: f32) {
     unsafe { opengl().Uniform1f(location, n) }
 }
-// TODO :: Implement after we have figured out matrix situation...
-// pub(crate) fn gl_set_uniform_matrix(location: i32, floats: (f32, f32, f32, f32)) {
+#[allow(dead_code)]
+pub(crate) fn gl_set_uniform_matrix(location: i32, mat: &[f32]) {
+    gl_set_uniform_matrix_xpose(location, mat, false)
+}
 
-// }
+#[allow(dead_code)]
+pub(crate) fn gl_set_uniform_matrix_xpose(location: i32, mat: &[f32], transpose: bool) {
+    unsafe { opengl().UniformMatrix4fv(location, 1, transpose as u8, mat.as_ptr()) }
+}
+
+#[allow(dead_code)]
 pub(crate) fn gl_set_uniform_i(location: i32, n: i32) {
     unsafe { opengl().Uniform1i(location, n) }
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_compile_shader_from_file(path: &str, shader_type: ShaderType) -> Result<u32, String> {
     let shader_source = match read_file(path) {
         Ok(s) => s,
@@ -95,20 +126,10 @@ pub(crate) fn gl_compile_shader_from_file(path: &str, shader_type: ShaderType) -
 }
 
 
-pub(crate) fn read_file(path: &str) -> std::io::Result<String> {
-    use std::fs::File;
-    use std::io::BufReader;
-    use std::io::prelude::*;
-
-    let f = File::open(path)?;
-    let mut reader = BufReader::new(f);
-    let mut contents = String::new();
-    reader.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
+#[allow(dead_code)]
 const GL_MAX_LOG_BUFFER_LENGTH: usize = 512;
 
+#[allow(dead_code)]
 // TODO :: Implement a way to parse given shader source files so we can find and fill out all uniform locations on shader
 pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, String> {
     let gl = opengl();
@@ -133,6 +154,7 @@ pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, 
     Ok(sid)
 }
 
+#[allow(dead_code)]
 pub(crate) fn gl_create_shader_program(vert_id: u32, frag_id: u32) -> Result<u32, String> {
     unsafe {
         let gl = opengl();

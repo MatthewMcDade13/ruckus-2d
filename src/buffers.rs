@@ -1,4 +1,5 @@
 use crate::opengl::*;
+use crate::graphics;
 use std::mem;
 
 #[derive(Debug, Copy, Clone)]
@@ -133,34 +134,39 @@ impl FrameBuffer {
         }
     }
 
-    fn bind(fb: &FrameBuffer) {
+    pub fn bind(fb: &FrameBuffer) {
         unsafe {
             opengl().BindFramebuffer(gl::FRAMEBUFFER, fb.id)
         };
     }
 
-    fn unbind() {
+    pub fn unbind() {
         unsafe {
             opengl().BindFramebuffer(gl::FRAMEBUFFER, 0)
         };
     }
 
-    fn attach_render_buffer(&self, rb: &RenderBuffer) {
+    pub fn attach_render_buffer(&self, rb: &RenderBuffer) {
         FrameBuffer::bind(self);
         unsafe {
             opengl().FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_STENCIL_ATTACHMENT, gl::RENDERBUFFER, rb.id)
         };
     }
 
-    // TODO: Implement these after we have finished Texture
-    // fn attach_texture(texture: &Texture) {}
-    // fn attach_texture_n(texture: &Texture, num_attachments: i32) {}
+    pub fn attach_texture(&self, texture: &graphics::Texture) {
+        self.attach_texture_n(texture, 0);
+    }
+
+    pub fn attach_texture_n(&self, texture: &graphics::Texture, attachment_num: u32) {
+        FrameBuffer::bind(self);
+        unsafe {
+            opengl().FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0 + attachment_num, gl::TEXTURE_2D, texture.id(), 0);
+        }
+    }
 }
 
 pub struct VertexBuffer {
     id: u32,
-    dtype: DataType,
-    vert_count: usize,
     size_bytes: usize
 }
 
@@ -175,7 +181,7 @@ impl VertexBuffer {
         unsafe { opengl().BufferData(gl::ARRAY_BUFFER, size_bytes, 0 as *const _, usage as u32) };
 
         VertexBuffer {
-            id, dtype, vert_count: 0, size_bytes: size_bytes as usize
+            id, size_bytes: size_bytes as usize
         }
     }
 
@@ -191,7 +197,7 @@ impl VertexBuffer {
         let size_bytes = mem::size_of::<T>() * count;
 
         let mut vb = VertexBuffer {
-            id, dtype, vert_count: count, size_bytes
+            id, size_bytes
         };
         vb.alloc(verts, count, usage);
 
@@ -248,10 +254,16 @@ pub struct VertexArray {
 }
 
 impl VertexArray {
+
+    pub fn new() -> Self {
+        VertexArray {
+            id: gl_gen_vertex_array()
+        }
+    }
+
     pub fn bind(&self) {
         gl_bind_vertex_array(self.id);
     }
-
 }
 
 impl Drop for ElementBuffer {
