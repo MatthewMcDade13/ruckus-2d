@@ -1,4 +1,6 @@
+use std::ops::Mul;
 use crate::graphics::*;
+use crate::vertex::*;
 use nalgebra_glm as glm;
 
 pub const PI: f32 = 3.1415926535897932384626433832795;
@@ -29,7 +31,7 @@ pub fn clamp_s(s: f32, smin: f32, smax: f32) -> f32 {
 }
 
 pub struct Rect<T: NumDefault> {
-    x: T, y: T, w: T, h: T
+    pub x: T, pub y: T, pub w: T, pub h: T
 }
 
 impl<T> Rect<T> where T: NumDefault {
@@ -78,14 +80,142 @@ impl Quad {
         result
     }
 
-    // pub fn new(mat: &glm::Mat4, texture_rect: Option<&Rectui>, texture_size: glm::TVec2<i32>) -> Self {
-    // }
+    pub fn new<T>(pos: glm::Vec2, size: glm::Vec2, rotation_degrees: f32, texture_rect: T) -> Self where T: Into<Option<Rectui>> {
+        let mut t = Transform::default();
+        t.translate(pos)
+            .rotate(rotation_degrees)
+            .scale(size);
+
+        Self::with_mat(t.model(), texture_rect)
+    }
+
+    pub fn with_mat<T>(mat: &glm::Mat4, texture_rect: T) -> Self where T: Into<Option<Rectui>> {
+        let mut verts = Self::verts();
+        verts.translate(&mat);
+
+        if let Some(r) = texture_rect.into() {
+            verts.calc_texture_coords(&r);
+        }
+
+        Self::with_verts(&verts)
+    }
+
+    pub fn with_verts(verts: &[Vertex2D]) -> Self {
+        let mut vs = [Vertex2D::default(); 4];
+        for (i, v) in vs.iter_mut().enumerate() {
+            *v = verts[i];
+        }
+        Quad { verts: vs }
+    }
+
+    pub fn flip_vertical_text_coords(&mut self, min: f32, max: f32) {
+        self.verts.flip_texture_coords_vert(min, max);
+    }
 }
 
+impl Default for Quad {
+    fn default() -> Self { 
+        Quad { verts: Self::verts() }
+    }
+}
+
+// Move to new file? Doesnt really seem like it belongs here...
+pub struct Transform(glm::Mat4);
+
+impl Transform {
+
+    pub fn new(mat: &glm::Mat4) -> Self {
+        Transform(*mat)
+    }
+ 
+    pub fn translate<T>(&mut self, offset: T) -> &mut Self  where T: Into<glm::Vec2> {
+        let offset: glm::Vec2 = offset.into();
+        self.0 = self.0 * Transform::from_position(offset).model();
+        self
+    }
+
+    pub fn scale<T>(&mut self, scale: T) -> &mut Self where T: Into<glm::Vec2> {
+        let scale = scale.into();
+        self.0 = self.0 * Transform::from_scale(scale).model();
+        self
+    }
+
+    pub fn rotate(&mut self, angle_degrees: f32) -> &mut Self {
+        self.0 = self.0 * Transform::from_rotation(angle_degrees).model();
+        self
+    }
+
+    /**
+     * Rotates transform from offset of top left corner
+     */
+    pub fn rotate_offset(&mut self, angle_degrees: f32, offset: glm::Vec2) -> &mut Self { 
+        self.translate(offset)
+            .rotate(angle_degrees)
+            .translate(-offset)
+    }
+
+    pub fn from_position<T>(position: T) -> Self where T: Into<glm::Vec2> {
+        let position = position.into();
+        let (x, y) = (position.x, position.y);
+        let model = glm::mat4(
+            1., 0., 0., x,
+            0., 1., 0., y,
+            0., 0., 1., 0.,
+            0., 0., 0., 1.
+        );
+        Transform(model)
+    }
+
+    pub fn from_scale<T>(scale: T) -> Self where T: Into<glm::Vec2> {
+        let scale = scale.into();
+        let (x, y) = (scale.x, scale.y);
+        let model = glm::mat4(
+            x , 0., 0., 0.,
+            0., y , 0., 0.,
+            0., 0., 1., 0.,
+            0., 0., 0., 1.
+        );
+        Transform(model)
+    }
+
+    pub fn from_rotation(angle_degrees: f32) -> Self {
+        let rotation = radians(angle_degrees);
+        let (sin, cos) = (f32::sin(rotation), f32::cos(rotation));
+        let model = glm::mat4(
+            cos, -sin,  0.,  0.,
+            sin,  cos,  0.,  0.,
+            0. ,  0. ,  1.,  0.,
+            0. ,  0. ,  0.,  1.
+        );
+        Transform(model)
+    }
+
+    pub fn combine_mut(&mut self, other: &Self) {
+        self.0 = self.0 * other.0;
+    }
+
+    pub fn combine(left: &Self, right: &Self) -> Self {
+        Transform(left.0 * right.0)
+    }
+
+    pub fn model(&self) -> &glm::Mat4 { &self.0 }
+}
+
+impl Mul for Transform {
+    type Output = Self;
+
+    fn mul(self, right: Self) -> Self { 
+        Self::combine(&self, &right)
+    }
+}
+
+impl Default for Transform {    
+    fn default() -> Self { 
+        Transform(glm::Mat4::identity())         
+    }
+}
 
 pub fn read_file(path: &str) -> std::io::Result<String> {
-
-
     use std::fs::File;
     use std::io::BufReader;
     use std::io::prelude::*;

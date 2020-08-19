@@ -4,10 +4,12 @@ mod sys;
 mod opengl;
 mod buffers;
 mod graphics;
+mod vertex;
 
 use sys::*;
 use buffers::*;
 use graphics::*;
+use vertex::*;
 use opengl::{opengl, gl};
 
 
@@ -80,7 +82,7 @@ impl Camera {
     }
 
     pub fn view(&self) -> glm::Mat4 {
-        glm::look_at(&self.position, &self.target(), &UP_VECTOR.into_vec3())
+        glm::look_at(&self.position, &self.target(), &UP_VECTOR.into())
     }
 
     pub fn target(&self) -> glm::Vec3 {
@@ -96,12 +98,12 @@ impl Camera {
     }
 
     pub fn move_left(&mut self, delta_time: f32) {
-        let v: glm::Vec3 = self.look_direction.cross(&UP_VECTOR.into_vec3());
+        let v: glm::Vec3 = self.look_direction.cross(&UP_VECTOR.into());
         self.position -= glm::normalize(&v) * self.speed * delta_time;
     }
 
     pub fn move_right(&mut self, delta_time: f32) {
-        let v = self.look_direction.cross(&UP_VECTOR.into_vec3());
+        let v = self.look_direction.cross(&UP_VECTOR.into());
         self.position += glm::normalize(&v) * self.speed * delta_time;
     }
 
