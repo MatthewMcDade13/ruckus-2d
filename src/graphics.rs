@@ -320,8 +320,13 @@ impl Shader {
         let _  = self.uniform_locations.insert(k, v);
     }
 
+    
     pub fn bind(&self) {
         unsafe { opengl().UseProgram(self.id) }
+    }
+    
+    pub fn default_instanced() -> Self {
+        Self::from_memory(DEFAULT_INSTANCED_VERT, DEFAULT_FRAG).unwrap()
     }
 
     fn new(id: u32) -> Self {
@@ -343,7 +348,13 @@ impl Shader {
     }
 }
 
+impl Default for Shader {
+    fn default() -> Self {
+        Self::from_memory(DEFAULT_VERT, DEFAULT_FRAG).unwrap()
+    }
+}
 
+// TODO :: Implement Mesh (or re-do it) to make drawing with Renderer easier
 // pub struct Mesh {
 //     vbo: VertexBuffer,
 //     ebo: Option<ElementBuffer>,

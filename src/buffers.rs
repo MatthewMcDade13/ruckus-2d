@@ -48,6 +48,15 @@ pub struct VertexAttribute {
     pub stride: usize
 }
 
+impl Default for VertexAttribute {
+    fn default() -> Self {
+        VertexAttribute {
+            buffer_index: 0, elem_count: 0, is_instanced: false,
+            dtype: DataType::Float, offset: 0, stride: 0
+        }
+    }
+}
+
 pub struct ElementBuffer {
     id: u32,
     count: usize
@@ -188,18 +197,18 @@ impl VertexBuffer {
     /**
      * Uses default Float Datatype
     */
-    pub fn new<T>(verts: &[T], count: usize, usage: DrawUsage) -> Self {
-        VertexBuffer::new_t(verts, count, usage, DataType::Float)
+    pub fn new<T>(verts: &[T], usage: DrawUsage) -> Self {
+        VertexBuffer::new_with_dtype(verts, usage, DataType::Float)
     }
 
-    pub fn new_t<T>(verts: &[T], count: usize, usage: DrawUsage, dtype: DataType) -> Self {
+    pub fn new_with_dtype<T>(verts: &[T], usage: DrawUsage, dtype: DataType) -> Self {
         let id = gl_gen_buffer();
-        let size_bytes = mem::size_of::<T>() * count;
+        let size_bytes = mem::size_of::<T>() * verts.len();
 
         let mut vb = VertexBuffer {
             id, size_bytes
         };
-        vb.alloc(verts, count, usage);
+        vb.alloc(verts, usage);
 
         vb
 
@@ -208,19 +217,19 @@ impl VertexBuffer {
     /**
      * Uses default Float Datatype
     */
-    pub fn alloc<T>(&mut self, verts: &[T], count: usize, usage: DrawUsage) {
+    pub fn alloc<T>(&mut self, verts: &[T], usage: DrawUsage) {
         self.bind();
-        self.size_bytes = count * mem::size_of::<T>();
+        self.size_bytes = verts.len() * mem::size_of::<T>();
 
         unsafe { 
             opengl().BufferData(gl::ARRAY_BUFFER, self.size_bytes as isize, verts.as_ptr() as *const _, usage as u32) 
         };
     }
 
-    pub fn write<T>(&self, verts: &[T], count: usize, offset: isize) {
+    pub fn write<T>(&self, verts: &[T],  offset: isize) {
         self.bind();
         unsafe {
-            opengl().BufferSubData(gl::ARRAY_BUFFER, offset, (mem::size_of::<T>() * count) as isize, verts.as_ptr() as *const _)
+            opengl().BufferSubData(gl::ARRAY_BUFFER, offset, (mem::size_of::<T>() * verts.len()) as isize, verts.as_ptr() as *const _)
         }
     }
 

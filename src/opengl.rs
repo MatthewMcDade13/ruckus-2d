@@ -1,4 +1,5 @@
 
+use crate::buffers::DrawPrimitive;
 use glutin::PossiblyCurrent;
 use std::ffi::CStr;
 use crate::sys::read_file;
@@ -125,6 +126,15 @@ pub(crate) fn gl_compile_shader_from_file(path: &str, shader_type: ShaderType) -
     gl_compile_shader(&shader_source, shader_type)
 }
 
+#[allow(dead_code)]
+pub(crate) fn gl_draw_arrays(start: u32, vert_count: u32, prim: DrawPrimitive) {
+    unsafe { opengl().DrawArrays(prim as u32, start as i32, vert_count as i32) }
+}
+
+#[allow(dead_code)]
+pub(crate) fn gl_draw_elements(count: u32, prim: DrawPrimitive) {
+    unsafe { opengl().DrawElements(prim as u32, count as i32, gl::UNSIGNED_INT, 0 ) }
+}
 
 #[allow(dead_code)]
 const GL_MAX_LOG_BUFFER_LENGTH: usize = 512;

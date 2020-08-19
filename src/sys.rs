@@ -10,6 +10,13 @@ pub const DEG_TO_RAD: f32 = 0.017453292519943295769236907684886;
 pub const RAD_TO_DEG: f32 = 57.295779513082320876798154814105;
 pub const EULER: f32 = 2.718281828459045235360287471352;
 
+#[macro_export]
+macro_rules! memory_offset {
+    ($ty:ty, $field:ident) => {
+        unsafe { &((*(0 as *const $ty)).$field) as *const _ as usize }
+    };
+}
+
 pub fn radians(degrees: f32) -> f32 {
     degrees * DEG_TO_RAD
 }
@@ -66,7 +73,7 @@ pub type Recti = Rect<i32>;
 pub type Rectui = Rect<u32>;
 
 // TODO :: Finish Quad -- Depends on: Vertex2D, Mesh and Transform
-struct Quad {
+pub struct Quad {
     verts: [Vertex2D; 4]
 }
 
