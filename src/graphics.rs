@@ -141,9 +141,24 @@ const VERT_TEMPLATE_DECLS: &str = r"#version 330
     out vec4 Color;
     out vec3 FragPos;
 
-    uniform mat4 u_matrixMVP;
-    uniform mat4 u_modelMatrix;
-    mat4 matrixMVP = u_matrixMVP;
+    uniform mat4 u_model;
+    uniform mat4 u_view;
+    uniform mat4 u_projection;
+    //uniform mat4 u_matrixMVP;
+    //uniform mat4 u_modelMatrix;
+";
+
+
+const VERT_TEMPLATE_MAIN: &str = r"
+void main()
+{
+    TexCoord = l_texCoords;
+    Color = l_color;
+
+    FragPos = vec3(u_model * vec4(l_pos, 1.0));
+
+    gl_Position = position(u_projection * u_view, * u_model, l_pos);
+}
 ";
 
 const VERT_TEMPLATE_DECLS_INSTANCED: &str = r"#version 330
@@ -159,17 +174,6 @@ const VERT_TEMPLATE_DECLS_INSTANCED: &str = r"#version 330
     mat4 matrixMVP = l_matrixMVP;
 ";
 
-const VERT_TEMPLATE_MAIN: &str = r"
-void main()
-{
-    TexCoord = l_texCoords;
-    Color = l_color;
-
-    FragPos = vec3(u_modelMatrix * vec4(l_pos, 1.0));
-
-    gl_Position = position(matrixMVP, l_pos);
-}
-";
 
 const DEFAULT_VERT: &str = r"#version 330
 layout(location = 0) in vec3 l_pos;
@@ -180,16 +184,18 @@ out vec2 TexCoord;
 out vec4 Color;
 out vec3 FragPos;
 
-uniform mat4 u_matrixMVP;
-uniform mat4 u_modelMatrix;
+//uniform mat4 u_matrixMVP;
+//uniform mat4 u_modelMatrix;
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
 
 void main()
 {
     TexCoord = l_texCoords;
     Color = l_color;
-    FragPos = vec3(u_modelMatrix * vec4(l_pos, 1.0));
 
-    gl_Position = u_matrixMVP * vec4(l_pos, 1.0);
+    gl_Position = u_projection * u_view, * u_model * vec4(l_pos, 1.0);
 }
 ";
 
@@ -335,8 +341,9 @@ impl Shader {
 
     fn from_memory_with_template_uniforms(vert: &str, frag: &str) -> Result<Self, String> {
         let mut s = Shader::from_memory(vert, frag)?;
-        s.register_uniform("u_matrixMVP");
-        s.register_uniform("u_modelMatrix");
+        s.register_uniform("u_projection");
+        s.register_uniform("u_view");
+        s.register_uniform("u_model");
         Ok(s)
     }
 
@@ -354,21 +361,36 @@ impl Default for Shader {
     }
 }
 
-// TODO :: Implement Mesh (or re-do it) to make drawing with Renderer easier
-// pub struct Mesh {
-//     vbo: VertexBuffer,
-//     ebo: Option<ElementBuffer>,
-//     texture: Option<Texture>,
+pub struct Mesh {
+    pub transform: Transform,
+    pub buffer: VertexBuffer,
+    pub indicies: Option<ElementBuffer>,
+    pub texture: Option<Texture>,
+    pub shader: Option<Shader>,
+}
 
-//     shader: Option<Shader>,
-//     prim_type: DrawPrimitive
-// }
+impl Mesh {
+    pub fn new(buffer: VertexBuffer) -> Self {
+        Self {
+            transform: Transform::default(),
+            buffer: buffer,
+            indicies: None,
+            texture: None,
+            shader: None,
+        }
+    }
 
-// impl Mesh {
-//     fn new() {
+    pub fn new_quad(usage: DrawUsage) -> Self {
+        Self {
+            transform: Transform::default(),
+            buffer: VertexBuffer::new(&Quad::verts(), usage),
+            indicies: Some(ElementBuffer::new_quad(6)),
+            texture: None,
+            shader: None,
 
-//     }
-// }
+        }
+    }
+}
 
 impl Drop for Shader {
     

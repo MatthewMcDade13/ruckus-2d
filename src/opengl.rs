@@ -1,4 +1,6 @@
 
+use crate::buffers::VertexAttribute;
+use crate::buffers::VertexBuffer;
 use crate::buffers::DrawPrimitive;
 use glutin::PossiblyCurrent;
 use std::ffi::CStr;
@@ -133,7 +135,7 @@ pub(crate) fn gl_draw_arrays(start: u32, vert_count: u32, prim: DrawPrimitive) {
 
 #[allow(dead_code)]
 pub(crate) fn gl_draw_elements(count: u32, prim: DrawPrimitive) {
-    unsafe { opengl().DrawElements(prim as u32, count as i32, gl::UNSIGNED_INT, 0 ) }
+    unsafe { opengl().DrawElements(prim as u32, count as i32, gl::UNSIGNED_INT, 0 as *const _) }
 }
 
 #[allow(dead_code)]
@@ -165,6 +167,20 @@ pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, 
 }
 
 #[allow(dead_code)]
+pub(crate) fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {
+    buffer.bind();
+
+    for attr in attribs.iter() {
+        unsafe {
+            let gl = opengl();
+            gl.VertexAttribPointer(attr.buffer_index, attr.elem_count as i32, attr.dtype as u32, gl::FALSE, attr.stride as i32, attr.offset as *const _);
+            gl.EnableVertexAttribArray(attr.buffer_index);
+            gl.VertexAttribDivisor(attr.buffer_index, if attr.is_instanced { 1 } else { 0 })
+        }
+    }
+}
+
+#[allow(dead_code)]
 pub(crate) fn gl_create_shader_program(vert_id: u32, frag_id: u32) -> Result<u32, String> {
     unsafe {
         let gl = opengl();
@@ -192,4 +208,15 @@ pub(crate) fn gl_create_shader_program(vert_id: u32, frag_id: u32) -> Result<u32
 
         Ok(id)
     }
+}
+
+
+#[allow(dead_code)]
+pub(crate) fn gl_unbind_element_buffer() {
+    unsafe { opengl().BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0) }
+}
+
+#[allow(dead_code)]
+pub(crate) fn gl_unbind_array_buffer() {
+    unsafe { opengl().BindBuffer(gl::ARRAY_BUFFER, 0) }
 }

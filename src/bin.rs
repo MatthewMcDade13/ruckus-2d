@@ -1,30 +1,35 @@
 
-use std::ops::Deref;
+struct A {
+    x: Point
+}
 
-struct Tag(f32);
+struct Point { pub x: f32, pub y: f32 }
 
-impl Tag {
-    pub fn new(n: Option<f32>) -> Self {
-        match n {
-            Some(v) => Tag(v),
-            None => Tag(0.)
-        }
+impl Drop for Point {
+    fn drop(&mut self) {
+        println!("DROP CALLED");
     }
 }
 
-fn new_tag<T> (t: T) -> Tag where T: Into<Option<f32>> {
-    let o = t.into();
-    match o {
-        Some((v)) => Tag(v),
-        None => Tag(0.)
+// impl Clone for Point {
+    
+//     fn clone(&self) -> Self { 
+//         Point { x: self.x, y: self.y }
+//     }
+// }
+
+impl A {
+    pub fn new(a: Point) -> A {
+        A { x: a }
     }
 }
+
 
 fn main() {
-    let x = 25.;
-    let y = Some(69.);
-
-    let t1 = new_tag(x);
-    let t2 = new_tag(y);
+    let p = Point {x: 1., y: 2.};
+    let a = A::new(p);
+    println!("AFTER NEW");
+    println!("{}", a.x.x);
+    // p.x = 5.;
 }
  

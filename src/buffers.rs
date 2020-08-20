@@ -59,7 +59,7 @@ impl Default for VertexAttribute {
 
 pub struct ElementBuffer {
     id: u32,
-    count: usize
+    pub count: u32
 }
 
 impl ElementBuffer {
@@ -70,12 +70,12 @@ impl ElementBuffer {
     pub fn new_with_draw(indicies: Vec<u32>, usage: DrawUsage) -> Self {
         let eb = ElementBuffer {
             id: gl_gen_buffer(),
-            count: indicies.len()
+            count: indicies.len() as u32
         };
         eb.bind();
 
         unsafe {
-            opengl().BufferData(gl::ELEMENT_ARRAY_BUFFER, (eb.count * mem::size_of::<u32>()) as isize, indicies.as_ptr() as *const _, usage as u32)
+            opengl().BufferData(gl::ELEMENT_ARRAY_BUFFER, (eb.count * mem::size_of::<u32>() as u32) as isize, indicies.as_ptr() as *const _, usage as u32)
         }
         eb
     }
@@ -176,12 +176,15 @@ impl FrameBuffer {
 
 pub struct VertexBuffer {
     id: u32,
-    size_bytes: usize
+    size_bytes: usize,
+    vert_count: u32,
+    pub draw_prim: DrawPrimitive
 }
 
+// TODO :: Make this act like more like an actual buffer (have checks for overflow, ect)
 impl VertexBuffer {
-    pub fn zeroed<T>(count: usize, usage: DrawUsage, dtype: DataType) -> Self {
-        let type_size = mem::size_of::<T>();
+    pub fn zeroed<T>(count: u32, usage: DrawUsage, draw_prim: DrawPrimitive) -> Self {
+        let type_size = mem::size_of::<T>() as u32;
         let id = gl_gen_buffer();
         let size_bytes = (type_size * count) as isize;
         
@@ -190,7 +193,7 @@ impl VertexBuffer {
         unsafe { opengl().BufferData(gl::ARRAY_BUFFER, size_bytes, 0 as *const _, usage as u32) };
 
         VertexBuffer {
-            id, size_bytes: size_bytes as usize
+            id, size_bytes: size_bytes as usize, vert_count: count, draw_prim
         }
     }
 
@@ -198,15 +201,15 @@ impl VertexBuffer {
      * Uses default Float Datatype
     */
     pub fn new<T>(verts: &[T], usage: DrawUsage) -> Self {
-        VertexBuffer::new_with_dtype(verts, usage, DataType::Float)
+        VertexBuffer::new_with_prim(verts, usage, DrawPrimitive::Triangles)
     }
 
-    pub fn new_with_dtype<T>(verts: &[T], usage: DrawUsage, dtype: DataType) -> Self {
+    pub fn new_with_prim<T>(verts: &[T], usage: DrawUsage, draw_prim: DrawPrimitive) -> Self {
         let id = gl_gen_buffer();
         let size_bytes = mem::size_of::<T>() * verts.len();
 
         let mut vb = VertexBuffer {
-            id, size_bytes
+            id, size_bytes, draw_prim, vert_count: verts.len() as u32
         };
         vb.alloc(verts, usage);
 
@@ -220,6 +223,7 @@ impl VertexBuffer {
     pub fn alloc<T>(&mut self, verts: &[T], usage: DrawUsage) {
         self.bind();
         self.size_bytes = verts.len() * mem::size_of::<T>();
+        self.vert_count = verts.len() as u32;
 
         unsafe { 
             opengl().BufferData(gl::ARRAY_BUFFER, self.size_bytes as isize, verts.as_ptr() as *const _, usage as u32) 
@@ -242,6 +246,8 @@ impl VertexBuffer {
         }
     }
 
+    pub fn vert_count(&self) -> u32 { self.vert_count }
+
     pub unsafe fn map_buffer(&self, access: BufferAccess) -> *mut std::ffi::c_void {
         self.bind();
         opengl().MapBuffer(gl::ARRAY_BUFFER, access as u32)
@@ -258,14 +264,14 @@ impl VertexBuffer {
 
 }
 
-pub struct VertexArray {
+pub struct VAO {
     id: u32
 }
 
-impl VertexArray {
+impl VAO {
 
     pub fn new() -> Self {
-        VertexArray {
+        VAO {
             id: gl_gen_vertex_array()
         }
     }
@@ -303,7 +309,7 @@ impl Drop for VertexBuffer {
     }
 }
 
-impl Drop for VertexArray {
+impl Drop for VAO {
     
     fn drop(&mut self) { 
         gl_delete_buffer(self.id)

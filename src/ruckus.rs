@@ -1,3 +1,7 @@
+use crate::opengl::gl_unbind_array_buffer;
+use crate::opengl::gl_draw_arrays;
+use crate::opengl::gl_unbind_element_buffer;
+use crate::opengl::gl_draw_elements;
 pub use nalgebra_glm as glm;
 
 mod sys;
@@ -26,7 +30,7 @@ pub trait DrawSurface {
 pub struct Renderer<'a> {
     pub camera: FlyCamera,
 
-    draw_vao: VertexArray,
+    draw_vao: VAO,
     quad_buffer: VertexBuffer,
     instanced_mat_buffer: VertexBuffer,
 
@@ -92,10 +96,10 @@ impl<'a> Renderer<'a> {
 
         let quad_buffer = VertexBuffer::new(&sys::Quad::verts(), DrawUsage::Dynamic);
 
-        let draw_vao = VertexArray::new();
+        let draw_vao = VAO::new();
         draw_vao.bind();
 
-        let instanced_mat_buffer = VertexBuffer::zeroed::<glm::Mat4>(2, DrawUsage::Dynamic, DataType::Float);
+        let instanced_mat_buffer = VertexBuffer::zeroed::<glm::Mat4>(2, DrawUsage::Dynamic, DrawPrimitive::Triangles);
 
         Renderer { 
             camera, draw_vao, quad_buffer,
@@ -114,13 +118,80 @@ impl<'a> Renderer<'a> {
 
     // }
 
-    // TODO :: Implement draw_mesh_* methods -- Depends on: Mesh
+    pub fn draw_mesh(&self, mesh: &Mesh) {
+        let shader = mesh.shader.as_ref().unwrap_or(&self.shader);
 
-    // TODO :: Implement draw calls.
+        shader.bind();
 
+        set_vertex_layout(&mesh.buffer, &self.attrib2d);
 
+        // let mvp = self.projection * self.camera.view() * mesh.transform.model();        
+        self.shader.set_uniform_matrix("u_projection", &self.projection);
+        self.shader.set_uniform_matrix("u_view", &self.camera.view());
+        self.shader.set_uniform_matrix("u_model", mesh.transform.model());
+
+        let texture = mesh.texture.as_ref().unwrap_or(&self.default_texture);
+
+        if let Some(e) = mesh.indicies.as_ref() {
+            self.draw_indexed_buffer_static(&mesh.buffer, &e, texture);
+        } else {
+            self.draw_buffer_static(&mesh.buffer, 0, texture);
+        }
+
+    }
+
+    pub fn draw_buffer<'b, T>(&self, buffer: &VertexBuffer, first_vertex: u32, xform: &Transform, texture: T) where T: Into<Option<&'b Texture>> {
+        let texture = texture.into().unwrap_or(&self.default_texture);
+        texture.bind();
+
+        self.shader.set_uniform_matrix("u_projection", &self.projection);
+        self.shader.set_uniform_matrix("u_view", &self.camera.view());
+        self.shader.set_uniform_matrix("u_model", xform.model());
+
+        set_vertex_layout(buffer, &self.attrib2d);
+
+        gl_draw_arrays(first_vertex, buffer.vert_count(), buffer.draw_prim);
+        gl_unbind_array_buffer();
+    }
+
+    /** 
+     * Draws given buffer without any kind of vertex transformation
+    */
+    pub fn draw_buffer_static<'b, T>(&self, buffer: &VertexBuffer, first_vertex: u32, texture: T) where T: Into<Option<&'b Texture>> {
+        let texture = texture.into().unwrap_or(&self.default_texture);
+        texture.bind();
+
+        self.shader.set_uniform_matrix("u_projection", &glm::Mat4::identity());
+        self.shader.set_uniform_matrix("u_view", &glm::Mat4::identity());
+        self.shader.set_uniform_matrix("u_model", &glm::Mat4::identity());
+
+        set_vertex_layout(buffer, &self.attrib2d);
+
+        gl_draw_arrays(first_vertex, buffer.vert_count(), buffer.draw_prim);
+        gl_unbind_array_buffer();
+    }
+    /** 
+     * Draws given buffer without any kind of vertex transformation
+    */
+    pub fn draw_indexed_buffer_static<'b, T>(&self, buffer: &VertexBuffer, ebo: &ElementBuffer, texture: T) where T: Into<Option<&'b Texture>> {
+        let texture = texture.into().unwrap_or(&self.default_texture);
+        texture.bind();
+        
+        self.shader.set_uniform_matrix("u_projection", &glm::Mat4::identity());
+        self.shader.set_uniform_matrix("u_view", &glm::Mat4::identity());
+        self.shader.set_uniform_matrix("u_model", &glm::Mat4::identity());
+
+        set_vertex_layout(buffer, &self.attrib2d);
+
+        ebo.bind();
+        gl_draw_elements(ebo.count, buffer.draw_prim);
+        gl_unbind_element_buffer();
+    }
+    
     pub fn present(&self) {
         self.surface.swap_buffers();
+        let t = Texture::new_blank();
+        self.draw_indexed_buffer_static(&VertexBuffer::new(&Quad::verts(), DrawUsage::Static), &ElementBuffer::new_quad(6), &t);
     }
 
     pub fn clear_black(&self) {
@@ -136,6 +207,13 @@ impl<'a> Renderer<'a> {
             opengl().Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
     }
+    
+    /**
+     * Binds renderer's internal VAO
+    */
+    pub fn set_current(&self) {
+        self.draw_vao.bind();
+    } 
 }
 
 
