@@ -72,13 +72,12 @@ pub type Rectf = Rect<f32>;
 pub type Recti = Rect<i32>;
 pub type Rectui = Rect<u32>;
 
-// TODO :: Finish Quad -- Depends on: Vertex2D, Mesh and Transform
 pub struct Quad {
-    verts: [Vertex2D; 4]
+    pub verts: [Vertex2D; 4]
 }
 
 impl Quad {
-    pub const fn verts() -> [Vertex2D; 4] {
+    pub const fn default_verts() -> [Vertex2D; 4] {
         let mut result = [Vertex2D::new(); 4];
         result[0] = Vertex2D{ position: Vert2DPosition { x: 0., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 1. }, color: Vert2DColor::white() };
         result[1] = Vertex2D{ position: Vert2DPosition { x: 0., y: 1., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 0. }, color: Vert2DColor::white() };
@@ -93,15 +92,15 @@ impl Quad {
             .rotate(rotation_degrees)
             .scale(size);
 
-        Self::with_mat(t.model(), texture_rect)
+        Self::with_xform(&t, texture_rect)
     }
 
-    pub fn with_mat<T>(mat: &glm::Mat4, texture_rect: T) -> Self where T: Into<Option<Rectui>> {
-        let mut verts = Self::verts();
-        verts.translate(&mat);
+    pub fn with_xform<T>(xform: &Transform, texture_rect: T) -> Self where T: Into<Option<Rectui>> {
+        let mut verts = Self::default_verts();
+        verts.iter_mut().translate(xform);
 
         if let Some(r) = texture_rect.into() {
-            verts.calc_texture_coords(&r);
+            verts.iter_mut().calc_texture_coords(&r);
         }
 
         Self::with_verts(&verts)
@@ -116,13 +115,13 @@ impl Quad {
     }
 
     pub fn flip_vertical_text_coords(&mut self, min: f32, max: f32) {
-        self.verts.flip_texture_coords_vert(min, max);
+        self.verts.iter_mut().flip_texture_coords_vert(min, max);
     }
 }
 
 impl Default for Quad {
     fn default() -> Self { 
-        Quad { verts: Self::verts() }
+        Quad { verts: Self::default_verts() }
     }
 }
 
@@ -206,6 +205,55 @@ impl Transform {
     }
 
     pub fn model(&self) -> &glm::Mat4 { &self.0 }
+}
+
+pub struct FrameTimer {
+    clock: std::time::Instant,
+    accumulator: f32,
+    target_delta: f32
+}
+
+impl FrameTimer {
+    pub fn new(target_delta: f32) -> Self {
+        FrameTimer {
+            clock: std::time::Instant::now(),
+            accumulator: 0.0,
+            target_delta
+        }
+    }
+
+    /**
+     *  Gets elapsed time since last call to elapsed() or new().
+     *  Used to get time from last frame to current frame
+    */
+    pub fn elapsed(&mut self) -> f32 {
+        let elapsed = self.clock.elapsed().as_secs_f32();
+        self.clock = std::time::Instant::now();
+        elapsed
+    }
+
+    pub fn accum_elapsed(&mut self) -> f32 {
+        self.accumulator += self.elapsed();
+        self.accumulator
+    }
+
+    pub fn reset(&mut self) {
+        self.accumulator = 0.0;
+        self.clock = std::time::Instant::now();
+    }
+
+    /**
+     * Called every frame to add up the accumulator and return true
+     * if we have passed enough time for an update
+    */
+    pub fn frame(&mut self) -> bool {
+        let acc = self.accum_elapsed();
+        if acc >= self.target_delta {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Mul for Transform {

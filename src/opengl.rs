@@ -2,8 +2,8 @@
 use crate::buffers::VertexAttribute;
 use crate::buffers::VertexBuffer;
 use crate::buffers::DrawPrimitive;
-use glutin::PossiblyCurrent;
 use std::ffi::CStr;
+use std::collections::HashMap;
 use crate::sys::read_file;
 use crate::graphics::{ShaderType};
 
@@ -11,13 +11,11 @@ pub(crate) mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
-#[allow(non_upper_case_globals)]
-static mut gl_context: Option<gl::Gl> = None;
+static mut GL_CONTEXT: Option<gl::Gl> = None;
 
-#[allow(dead_code)]
-pub(crate) fn load_opengl(context: &glutin::Context<PossiblyCurrent>) {
+pub fn load_opengl<F>(loader: F) where F: FnMut(&'static str)  -> *const std::ffi::c_void {
 
-    let gl = gl::Gl::load_with(|ptr| context.get_proc_address(ptr) as *const _);
+    let gl = gl::Gl::load_with(loader);
 
     let version = unsafe {
         let data = CStr::from_ptr(gl.GetString(gl::VERSION) as *const _)
@@ -29,14 +27,13 @@ pub(crate) fn load_opengl(context: &glutin::Context<PossiblyCurrent>) {
     println!("OpenGL version {}", version);
 
     unsafe {
-        gl_context = Some(gl);
+        GL_CONTEXT = Some(gl);
     }
 }
 
 pub(crate) fn opengl() -> &'static gl::Gl {
     unsafe {
-        assert_eq!(gl_context.is_some(), true, "Initialize OpenGL with load_opengl() before calling opengl()");
-        return gl_context.as_ref().expect("OpenGL not yet loaded");
+        GL_CONTEXT.as_ref().expect("Initialize OpenGL with load_opengl() before using any OpenGL draw calls)")
     }
 }
 
@@ -139,15 +136,17 @@ pub(crate) fn gl_draw_elements(count: u32, prim: DrawPrimitive) {
 }
 
 #[allow(dead_code)]
-const GL_MAX_LOG_BUFFER_LENGTH: usize = 512;
+const GL_MAX_LOG_BUFFER_LENGTH: usize = 2564;
 
 #[allow(dead_code)]
-// TODO :: Implement a way to parse given shader source files so we can find and fill out all uniform locations on shader
+// TODO :: Consolidate all default shaders (except instanced, do those too but separate) into a single shader with #ifdef to make
+//         everything more clean and DRY
 pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, String> {
     let gl = opengl();
     let sid = unsafe { gl.CreateShader(stype as u32) };
     unsafe {
-        gl.ShaderSource(sid, 1, source.as_ptr() as *const *const i8, 0 as *const _);
+        let source =  vec![std::ffi::CString::new(source).unwrap()];
+        gl.ShaderSource(sid, 1, source.as_ptr() as *const _, 0 as *const _);
         gl.CompileShader(sid);
 
         let mut success = std::mem::zeroed();
@@ -155,29 +154,15 @@ pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, 
 
         if success == 0 {
 
+            let mut info_log = [0; GL_MAX_LOG_BUFFER_LENGTH];
+            gl.GetShaderInfoLog(sid, GL_MAX_LOG_BUFFER_LENGTH as i32, 0 as *mut _, info_log.as_mut_ptr() as *mut _);
+        
+            let shader_error = String::from_utf8(info_log.to_vec()).unwrap();
             gl.DeleteShader(sid);
-            let mut info_log: Vec<u8> = vec![0, GL_MAX_LOG_BUFFER_LENGTH as u8];
-
-            gl.GetShaderInfoLog(sid, info_log.len() as i32, 0 as *mut _, info_log.as_mut_ptr() as *mut _);
-            let shader_error = String::from_utf8(info_log).unwrap();
             return Err(format!("SHADER COMPILE ERROR\n\r--------------------\n\r{}", shader_error))
         }
     };        
     Ok(sid)
-}
-
-#[allow(dead_code)]
-pub(crate) fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {
-    buffer.bind();
-
-    for attr in attribs.iter() {
-        unsafe {
-            let gl = opengl();
-            gl.VertexAttribPointer(attr.buffer_index, attr.elem_count as i32, attr.dtype as u32, gl::FALSE, attr.stride as i32, attr.offset as *const _);
-            gl.EnableVertexAttribArray(attr.buffer_index);
-            gl.VertexAttribDivisor(attr.buffer_index, if attr.is_instanced { 1 } else { 0 })
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -194,19 +179,67 @@ pub(crate) fn gl_create_shader_program(vert_id: u32, frag_id: u32) -> Result<u32
         gl.GetProgramiv(id, gl::LINK_STATUS, &mut success);
 
         if success == 0 {
-            gl.DeleteProgram(id);
-
-            let mut info_log: Vec<u8> = vec![0, GL_MAX_LOG_BUFFER_LENGTH as u8];
-
+            
+            let mut info_log = [0; GL_MAX_LOG_BUFFER_LENGTH];
+            
             gl.GetProgramInfoLog(id, info_log.len() as i32, 0 as *mut _, info_log.as_mut_ptr() as *mut _);
-            let shader_error = String::from_utf8(info_log).unwrap();
-            return Err(format!("SHADER PROGRAM LINK ERROR\n\r-------------------\n\r{}", shader_error))
+            let shader_error = String::from_utf8(info_log.to_vec()).unwrap();   
+
+            gl.DeleteProgram(id);
+            return Err(format!("SHADER PROGRAM LINK ERROR\n\r-------------------\n\r{}", shader_error));
         }
 
         gl.DeleteShader(vert_id);
         gl.DeleteShader(frag_id);
 
         Ok(id)
+    }
+}
+
+
+#[allow(dead_code)]
+pub(crate) fn gl_get_active_uniforms(shader_id: u32) -> HashMap<String, i32> {
+    let gl = opengl();
+    let count = unsafe {
+        let mut count = std::mem::zeroed();
+        gl.GetProgramiv(shader_id, gl::ACTIVE_UNIFORMS, &mut count);
+        count
+    };
+
+    let mut result = HashMap::new();
+
+    for i in 0..count {
+        const NAME_SIZE: usize = 32;
+        unsafe {
+            let mut length = std::mem::zeroed();
+            let mut size = std::mem::zeroed();
+            let mut dtype = std::mem::zeroed();
+            let mut name = vec![0; NAME_SIZE];
+            gl.GetActiveUniform(shader_id, i as u32, NAME_SIZE as i32, &mut length, &mut size, &mut dtype, name.as_mut_ptr() as *mut _);   
+            
+            
+            // TODO :: This is ugly. Fix it. I am sure there is a cleaner Rust way to do this... but I am tired and my will is weak...
+            let name: Vec<u8> = name.into_iter().filter(|b| {*b != 0}).collect();
+            let k: String = String::from_utf8(name).unwrap();
+
+            let v = gl_get_uniform_location(shader_id, &k);
+            let _ = result.insert(k, v);
+        }
+    }
+    result
+}
+
+#[allow(dead_code)]
+pub(crate) fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {
+    buffer.apply();
+
+    for attr in attribs.iter() {
+        unsafe {
+            let gl = opengl();
+            gl.VertexAttribPointer(attr.buffer_index, attr.elem_count as i32, attr.dtype as u32, gl::FALSE, attr.stride as i32, attr.offset as *const _);
+            gl.EnableVertexAttribArray(attr.buffer_index);
+            gl.VertexAttribDivisor(attr.buffer_index, if attr.is_instanced { 1 } else { 0 })
+        }
     }
 }
 

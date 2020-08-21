@@ -72,7 +72,7 @@ impl ElementBuffer {
             id: gl_gen_buffer(),
             count: indicies.len() as u32
         };
-        eb.bind();
+        eb.apply();
 
         unsafe {
             opengl().BufferData(gl::ELEMENT_ARRAY_BUFFER, (eb.count * mem::size_of::<u32>() as u32) as isize, indicies.as_ptr() as *const _, usage as u32)
@@ -100,7 +100,7 @@ impl ElementBuffer {
         ElementBuffer::new(indicies)
     }
 
-    pub fn bind(&self) {
+    pub fn apply(&self) {
         unsafe {
             opengl().BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.id)
         }
@@ -115,7 +115,7 @@ impl RenderBuffer {
     pub fn new(width: i32, height: i32) -> Self {
         let id = gl_gen_buffer();
         let rb = RenderBuffer { id };
-        rb.bind();
+        rb.apply();
 
         unsafe {
             opengl().RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH24_STENCIL8, width, height);
@@ -123,7 +123,7 @@ impl RenderBuffer {
         rb
     }
 
-    pub fn bind(&self) {
+    pub fn apply(&self) {
         unsafe { opengl().BindBuffer(gl::RENDERBUFFER, self.id) };
     }
 }
@@ -138,12 +138,12 @@ impl FrameBuffer {
             let mut id = mem::zeroed();
             opengl().GenFramebuffers(1, &mut id);
             let fb = FrameBuffer { id };
-            FrameBuffer::bind(&fb);
+            FrameBuffer::apply(&fb);
             return fb;
         }
     }
 
-    pub fn bind(fb: &FrameBuffer) {
+    pub fn apply(fb: &FrameBuffer) {
         unsafe {
             opengl().BindFramebuffer(gl::FRAMEBUFFER, fb.id)
         };
@@ -156,7 +156,7 @@ impl FrameBuffer {
     }
 
     pub fn attach_render_buffer(&self, rb: &RenderBuffer) {
-        FrameBuffer::bind(self);
+        FrameBuffer::apply(self);
         unsafe {
             opengl().FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_STENCIL_ATTACHMENT, gl::RENDERBUFFER, rb.id)
         };
@@ -167,7 +167,7 @@ impl FrameBuffer {
     }
 
     pub fn attach_texture_n(&self, texture: &graphics::Texture, attachment_num: u32) {
-        FrameBuffer::bind(self);
+        FrameBuffer::apply(self);
         unsafe {
             opengl().FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0 + attachment_num, gl::TEXTURE_2D, texture.id(), 0);
         }
@@ -221,7 +221,7 @@ impl VertexBuffer {
      * Uses default Float Datatype
     */
     pub fn alloc<T>(&mut self, verts: &[T], usage: DrawUsage) {
-        self.bind();
+        self.apply();
         self.size_bytes = verts.len() * mem::size_of::<T>();
         self.vert_count = verts.len() as u32;
 
@@ -231,7 +231,7 @@ impl VertexBuffer {
     }
 
     pub fn write<T>(&self, verts: &[T],  offset: isize) {
-        self.bind();
+        self.apply();
         unsafe {
             opengl().BufferSubData(gl::ARRAY_BUFFER, offset, (mem::size_of::<T>() * verts.len()) as isize, verts.as_ptr() as *const _)
         }
@@ -249,16 +249,16 @@ impl VertexBuffer {
     pub fn vert_count(&self) -> u32 { self.vert_count }
 
     pub unsafe fn map_buffer(&self, access: BufferAccess) -> *mut std::ffi::c_void {
-        self.bind();
+        self.apply();
         opengl().MapBuffer(gl::ARRAY_BUFFER, access as u32)
     }
 
     pub unsafe fn unmap(&self) {
-        self.bind();
+        self.apply();
         opengl().UnmapBuffer(gl::ARRAY_BUFFER);
     }
 
-    pub fn bind(&self) {
+    pub fn apply(&self) {
         gl_bind_array_buffer(self.id)
     }
 
@@ -276,7 +276,7 @@ impl VAO {
         }
     }
 
-    pub fn bind(&self) {
+    pub fn apply(&self) {
         gl_bind_vertex_array(self.id);
     }
 }
@@ -318,7 +318,7 @@ impl Drop for VAO {
 
 pub fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {
     let gl = opengl();
-    buffer.bind();
+    buffer.apply();
 
     for attrib in attribs.iter() {
         unsafe {

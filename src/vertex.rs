@@ -1,6 +1,6 @@
 use nalgebra_glm as glm;
 
-use crate::sys::{Rect, Rectui};
+use crate::sys::{Rect, Rectui, Transform};
 
 pub struct TupleVector(f32, f32, f32);
 pub const UP_VECTOR: TupleVector = TupleVector(0., 1., 0.);
@@ -50,9 +50,9 @@ impl From<Vert2DPosition> for glm::Vec4 {
     }
 }
 
-pub trait Vertex2DSliceOps {
+pub trait Vertex2DSliceOps<'a> {
     fn set_color(&mut self, color: &glm::Vec4);
-    fn translate(&mut self, mat: &glm::Mat4);
+    fn translate(&mut self, xform: &Transform);
     fn calc_texture_coords(&mut self, texture_rect: &Rectui);
     /** 
      * Flips given verts tex coordinates along vertical (y) axis. Assumes
@@ -63,26 +63,34 @@ pub trait Vertex2DSliceOps {
     fn normalize_texture_coords(&mut self, bounds: glm::Vec2);
 }
 
+trait Vertex2DAsRaw<'a> { fn as_raw(&self) -> &'a [f32]; }
 
-impl Vertex2DSliceOps for [Vertex2D; 4] {
+impl<'a> Vertex2DAsRaw<'a> for std::slice::Iter<'_, Vertex2D> {
+    fn as_raw(&self) -> &'a [f32] {
+        unsafe { std::mem::transmute(self.as_slice()) }
+    }
+}
+
+
+impl<'a> Vertex2DSliceOps<'a> for std::slice::IterMut<'_, Vertex2D> {
     
     fn set_color(&mut self, color: &glm::Vec4) {
-        for v in self.iter_mut() { v.color = color.into() }
+        for v in self { v.color = color.into() }
     }
 
-    fn translate(&mut self, xform: &glm::Mat4) {
-        for v in self.iter_mut() {
+    fn translate(&mut self, xform: &Transform) {
+        for v in self {
             let position: glm::Vec4 = v.position.into();
-            v.position = (xform * position).into();
+            v.position = (xform.model() * position).into();
         }
     }
 
     fn flip_texture_coords_vert(&mut self, min: f32, max: f32) {
-        for v in self.iter_mut() { v.text_coord.v = min + (max - v.text_coord.v) }
+        for v in self { v.text_coord.v = min + (max - v.text_coord.v) }
     }
 
     fn normalize_texture_coords(&mut self, bounds: glm::Vec2) {
-        for v in self.iter_mut() { 
+        for v in self { 
             v.text_coord.u /= bounds.x;
             v.text_coord.v = 1.0 - (v.text_coord.v / bounds.y);
         }
@@ -92,7 +100,7 @@ impl Vertex2DSliceOps for [Vertex2D; 4] {
         let rect_size = glm::vec2(texture_rect.w as f32, texture_rect.h as f32);
         let uv_offset = glm::vec2(texture_rect.x as f32, texture_rect.y as f32);
 
-        for v in self.iter_mut() {
+        for v in self {
             let flipped = glm::vec2(v.text_coord.u, 1. - v.text_coord.v);
             // Flip texture coordinates
             let text_dim = glm::vec2(rect_size.x * flipped.x, rect_size.y * (1. - v.text_coord.v));

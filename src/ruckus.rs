@@ -4,11 +4,11 @@ use crate::opengl::gl_unbind_element_buffer;
 use crate::opengl::gl_draw_elements;
 pub use nalgebra_glm as glm;
 
-mod sys;
-mod opengl;
-mod buffers;
-mod graphics;
-mod vertex;
+pub mod sys;
+pub mod opengl;
+pub mod buffers;
+pub mod graphics;
+pub mod vertex;
 
 use sys::*;
 use buffers::*;
@@ -19,15 +19,27 @@ use opengl::{opengl, gl};
 const CLIP_NEAR_DEFAULT: f32 = -50.;
 const CLIP_FAR_DEFAULT: f32 = 50.;
 
-pub trait DrawSurface {
-    fn swap_buffers(&self);
-    fn clear(&self);
+// pub trait DrawSurface {
 
-    fn width(&self) -> f32;
-    fn height(&self) -> f32;
+//     fn swap_buffers(&self);
+
+//     fn clear(&self, color: &glm::Vec4) {
+//         unsafe {
+//             opengl().ClearColor(color.x, color.y, color.z, color.w);
+//             opengl().Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+//         }
+//     }
+
+//     fn width(&self) -> f32;
+//     fn height(&self) -> f32;
+// }
+
+pub trait Renderable {
+    fn draw(&self, renderer: &Renderer);
 }
 
-pub struct Renderer<'a> {
+// TODO :: Implement uses for unsued field memebers
+pub struct Renderer {
     pub camera: FlyCamera,
 
     draw_vao: VAO,
@@ -37,7 +49,6 @@ pub struct Renderer<'a> {
     shader: Shader,
     instanced_shader: Shader,
     
-    surface: &'a (dyn DrawSurface + 'a),
     default_texture: Texture,
     projection: glm::Mat4,
     viewport: sys::Rectf,
@@ -48,17 +59,17 @@ pub struct Renderer<'a> {
 
 // TODO :: Implement some type of builder pattern for renderer to pass flags on create,
 //         until then we have no way of modifying renderer defaults outside of cumbersome set_* calls
-impl<'a> Renderer<'a> {
+impl Renderer {
 
-    pub fn new(surface: &'a (dyn DrawSurface + 'a)) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {     
         unsafe {
             let gl = opengl();
-            gl.Viewport(0, 0, surface.width() as i32, surface.height() as i32);
+            gl.Viewport(0, 0, width as i32, height as i32);
             gl.Enable(gl::DEPTH_TEST);
             gl.Enable(gl::BLEND);
             gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         };
-        let viewport = sys::Rect::new(0., 0., surface.width(), surface.height());
+        let viewport = sys::Rect::new(0., 0., width as f32, height as f32);
         let projection = glm::ortho(viewport.x, viewport.w, viewport.h, viewport.y, CLIP_NEAR_DEFAULT, CLIP_FAR_DEFAULT);
 
         let camera = { 
@@ -94,34 +105,38 @@ impl<'a> Renderer<'a> {
         let instanced_shader = Shader::default_instanced();
         let default_texture = Texture::new_blank();
 
-        let quad_buffer = VertexBuffer::new(&sys::Quad::verts(), DrawUsage::Dynamic);
+        let quad_buffer = VertexBuffer::new(&sys::Quad::default_verts(), DrawUsage::Dynamic);
 
         let draw_vao = VAO::new();
-        draw_vao.bind();
+        draw_vao.apply();
 
         let instanced_mat_buffer = VertexBuffer::zeroed::<glm::Mat4>(2, DrawUsage::Dynamic, DrawPrimitive::Triangles);
 
         Renderer { 
             camera, draw_vao, quad_buffer,
             instanced_mat_buffer, shader, 
-            instanced_shader, surface,
+            instanced_shader,
             default_texture, projection, viewport,
             attrib2d, attrib2d_instanced
         }
     }
 
-    // TODO :: Implement drawing to a texture -- Depends on: RenderTexture
-    // pub fn begin_draw_texture(rt: &RenderTexture) {
+    
+    pub fn begin_draw_texture(rt: &RenderTexture) {
+        FrameBuffer::apply(&rt.frame_buffer);
+    }
+    pub fn end_draw_texture() {
+        FrameBuffer::unbind();
+    }
 
-    // }
-    // pub fn end_draw_texture() {
-
-    // }
+    pub fn draw<T>(&self, renderable: &T) where T: Renderable {
+        renderable.draw(self);
+    }
 
     pub fn draw_mesh(&self, mesh: &Mesh) {
         let shader = mesh.shader.as_ref().unwrap_or(&self.shader);
 
-        shader.bind();
+        shader.apply();
 
         set_vertex_layout(&mesh.buffer, &self.attrib2d);
 
@@ -140,9 +155,29 @@ impl<'a> Renderer<'a> {
 
     }
 
+    pub fn draw_quad<'b, T>(&self, q: &Quad, xform: &Transform, texture: T) where T: Into<Option<&'b Texture>> {
+        self.draw_quad_shader(q, xform, &self.shader, texture);
+    }
+    
+    pub fn draw_quad_shader<'b, T>(&self, q: &Quad, xform: &Transform, shader: &Shader, texture: T) where T: Into<Option<&'b Texture>> {
+        let texture = texture.into().unwrap_or(&self.default_texture);
+        texture.apply();
+        shader.apply();
+        set_vertex_layout(&self.quad_buffer, &self.attrib2d);
+
+        self.shader.set_uniform_matrix("u_projection", &self.projection);
+        self.shader.set_uniform_matrix("u_view", &self.camera.view());
+        self.shader.set_uniform_matrix("u_model", xform.model());
+
+        self.quad_buffer.write(&q.verts, 0);
+
+        gl_draw_arrays(0, self.quad_buffer.vert_count(), DrawPrimitive::Triangles);
+
+    }
+
     pub fn draw_buffer<'b, T>(&self, buffer: &VertexBuffer, first_vertex: u32, xform: &Transform, texture: T) where T: Into<Option<&'b Texture>> {
         let texture = texture.into().unwrap_or(&self.default_texture);
-        texture.bind();
+        texture.apply();
 
         self.shader.set_uniform_matrix("u_projection", &self.projection);
         self.shader.set_uniform_matrix("u_view", &self.camera.view());
@@ -159,7 +194,7 @@ impl<'a> Renderer<'a> {
     */
     pub fn draw_buffer_static<'b, T>(&self, buffer: &VertexBuffer, first_vertex: u32, texture: T) where T: Into<Option<&'b Texture>> {
         let texture = texture.into().unwrap_or(&self.default_texture);
-        texture.bind();
+        texture.apply();
 
         self.shader.set_uniform_matrix("u_projection", &glm::Mat4::identity());
         self.shader.set_uniform_matrix("u_view", &glm::Mat4::identity());
@@ -175,7 +210,7 @@ impl<'a> Renderer<'a> {
     */
     pub fn draw_indexed_buffer_static<'b, T>(&self, buffer: &VertexBuffer, ebo: &ElementBuffer, texture: T) where T: Into<Option<&'b Texture>> {
         let texture = texture.into().unwrap_or(&self.default_texture);
-        texture.bind();
+        texture.apply();
         
         self.shader.set_uniform_matrix("u_projection", &glm::Mat4::identity());
         self.shader.set_uniform_matrix("u_view", &glm::Mat4::identity());
@@ -183,28 +218,22 @@ impl<'a> Renderer<'a> {
 
         set_vertex_layout(buffer, &self.attrib2d);
 
-        ebo.bind();
+        ebo.apply();
         gl_draw_elements(ebo.count, buffer.draw_prim);
         gl_unbind_element_buffer();
     }
     
-    pub fn present(&self) {
-        self.surface.swap_buffers();
-        let t = Texture::new_blank();
-        self.draw_indexed_buffer_static(&VertexBuffer::new(&Quad::verts(), DrawUsage::Static), &ElementBuffer::new_quad(6), &t);
-    }
-
     pub fn clear_black(&self) {
         unsafe {
             opengl().ClearColor(0., 0., 0., 1.);
-            opengl().Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            opengl().Clear(gl::COLOR_BUFFER_BIT);
         }
     }
 
     pub fn clear(&self, color: &glm::Vec4) {
         unsafe {
             opengl().ClearColor(color.x, color.y, color.z, color.w);
-            opengl().Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            opengl().Clear(gl::COLOR_BUFFER_BIT);
         }
     }
     
@@ -212,7 +241,7 @@ impl<'a> Renderer<'a> {
      * Binds renderer's internal VAO
     */
     pub fn set_current(&self) {
-        self.draw_vao.bind();
+        self.draw_vao.apply();
     } 
 }
 
