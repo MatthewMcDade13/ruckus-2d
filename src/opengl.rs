@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::sys::read_file;
 use crate::graphics::{ShaderType};
 
-pub(crate) mod gl {
+pub mod gl {
     include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
 }
 
@@ -31,7 +31,7 @@ pub fn load_opengl<F>(loader: F) where F: FnMut(&'static str)  -> *const std::ff
     }
 }
 
-pub(crate) fn opengl() -> &'static gl::Gl {
+pub fn opengl() -> &'static gl::Gl {
     unsafe {
         GL_CONTEXT.as_ref().expect("Initialize OpenGL with load_opengl() before using any OpenGL draw calls)")
     }
@@ -122,16 +122,16 @@ pub(crate) fn gl_compile_shader_from_file(path: &str, shader_type: ShaderType) -
         Ok(s) => s,
         Err(e) => return Err(format!("FILE READ ERROR :: {}", e))
     };
-    gl_compile_shader(&shader_source, shader_type)
+    gl_compile_shader(shader_source.as_bytes(), shader_type)
 }
 
 #[allow(dead_code)]
-pub(crate) fn gl_draw_arrays(start: u32, vert_count: u32, prim: DrawPrimitive) {
+pub fn gl_draw_arrays(start: u32, vert_count: u32, prim: DrawPrimitive) {
     unsafe { opengl().DrawArrays(prim as u32, start as i32, vert_count as i32) }
 }
 
 #[allow(dead_code)]
-pub(crate) fn gl_draw_elements(count: u32, prim: DrawPrimitive) {
+pub fn gl_draw_elements(count: u32, prim: DrawPrimitive) {
     unsafe { opengl().DrawElements(prim as u32, count as i32, gl::UNSIGNED_INT, 0 as *const _) }
 }
 
@@ -141,11 +141,11 @@ const GL_MAX_LOG_BUFFER_LENGTH: usize = 2564;
 #[allow(dead_code)]
 // TODO :: Consolidate all default shaders (except instanced, do those too but separate) into a single shader with #ifdef to make
 //         everything more clean and DRY
-pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, String> {
+pub(crate) fn gl_compile_shader(source: &[u8], stype: ShaderType) -> Result<u32, String> {
     let gl = opengl();
     let sid = unsafe { gl.CreateShader(stype as u32) };
     unsafe {
-        let source =  vec![std::ffi::CString::new(source).unwrap()];
+        let source = vec![source.as_ptr() as *const _];
         gl.ShaderSource(sid, 1, source.as_ptr() as *const _, 0 as *const _);
         gl.CompileShader(sid);
 
@@ -157,7 +157,8 @@ pub(crate) fn gl_compile_shader(source: &str, stype: ShaderType) -> Result<u32, 
             let mut info_log = [0; GL_MAX_LOG_BUFFER_LENGTH];
             gl.GetShaderInfoLog(sid, GL_MAX_LOG_BUFFER_LENGTH as i32, 0 as *mut _, info_log.as_mut_ptr() as *mut _);
         
-            let shader_error = String::from_utf8(info_log.to_vec()).unwrap();
+            let cerror = std::ffi::CStr::from_ptr(info_log.as_ptr()).to_str().unwrap();
+            let shader_error = String::from(cerror);
             gl.DeleteShader(sid);
             return Err(format!("SHADER COMPILE ERROR\n\r--------------------\n\r{}", shader_error))
         }
@@ -183,7 +184,9 @@ pub(crate) fn gl_create_shader_program(vert_id: u32, frag_id: u32) -> Result<u32
             let mut info_log = [0; GL_MAX_LOG_BUFFER_LENGTH];
             
             gl.GetProgramInfoLog(id, info_log.len() as i32, 0 as *mut _, info_log.as_mut_ptr() as *mut _);
-            let shader_error = String::from_utf8(info_log.to_vec()).unwrap();   
+
+            let cerror = std::ffi::CStr::from_ptr(info_log.as_ptr()).to_str().unwrap();
+            let shader_error = String::from(cerror);   
 
             gl.DeleteProgram(id);
             return Err(format!("SHADER PROGRAM LINK ERROR\n\r-------------------\n\r{}", shader_error));
@@ -219,8 +222,8 @@ pub(crate) fn gl_get_active_uniforms(shader_id: u32) -> HashMap<String, i32> {
             
             
             // TODO :: This is ugly. Fix it. I am sure there is a cleaner Rust way to do this... but I am tired and my will is weak...
-            let name: Vec<u8> = name.into_iter().filter(|b| {*b != 0}).collect();
-            let k: String = String::from_utf8(name).unwrap();
+            let name = unsafe { std::ffi::CStr::from_ptr(name.as_ptr()).to_str().unwrap() };
+            let k = String::from(name);
 
             let v = gl_get_uniform_location(shader_id, &k);
             let _ = result.insert(k, v);

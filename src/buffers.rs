@@ -1,3 +1,4 @@
+use crate::vertex::Vertex2D;
 use crate::opengl::*;
 use crate::graphics;
 use std::mem;
@@ -105,6 +106,10 @@ impl ElementBuffer {
             opengl().BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.id)
         }
     }
+
+    pub fn unbind(&self) {
+        gl_unbind_element_buffer();
+    }
 }
 
 pub struct RenderBuffer {
@@ -178,7 +183,8 @@ pub struct VertexBuffer {
     id: u32,
     size_bytes: usize,
     vert_count: u32,
-    pub draw_prim: DrawPrimitive
+    pub draw_prim: DrawPrimitive,
+    pub layout: Vec<VertexAttribute>
 }
 
 // TODO :: Make this act like more like an actual buffer (have checks for overflow, ect)
@@ -193,8 +199,20 @@ impl VertexBuffer {
         unsafe { opengl().BufferData(gl::ARRAY_BUFFER, size_bytes, 0 as *const _, usage as u32) };
 
         VertexBuffer {
-            id, size_bytes: size_bytes as usize, vert_count: count, draw_prim
+            id, size_bytes: size_bytes as usize, vert_count: count, draw_prim, layout: Self::vertex2d_attributes()
         }
+    }
+
+    pub fn vertex2d_attributes() -> Vec<VertexAttribute> {
+        
+        let vert_size = std::mem::size_of::<Vertex2D>();
+        // let uv_offset = 
+        let mut attr = vec![VertexAttribute::default(); 3];
+        attr[0] = VertexAttribute { buffer_index: 0, elem_count: 3, dtype: DataType::Float, stride: vert_size, offset: 0, is_instanced: false };
+        attr[1] = VertexAttribute { buffer_index: 1, elem_count: 2, dtype: DataType::Float, stride: vert_size, offset: crate::memory_offset!(Vertex2D, text_coord), is_instanced: false };
+        attr[2] = VertexAttribute { buffer_index: 2, elem_count: 4, dtype: DataType::Float, stride: vert_size, offset: crate::memory_offset!(Vertex2D, color), is_instanced: false };
+        attr
+        
     }
 
     /**
@@ -209,12 +227,11 @@ impl VertexBuffer {
         let size_bytes = mem::size_of::<T>() * verts.len();
 
         let mut vb = VertexBuffer {
-            id, size_bytes, draw_prim, vert_count: verts.len() as u32
+            id, size_bytes, draw_prim, vert_count: verts.len() as u32, layout: Self::vertex2d_attributes()
         };
         vb.alloc(verts, usage);
 
         vb
-
     }
   
     /**
@@ -262,6 +279,10 @@ impl VertexBuffer {
         gl_bind_array_buffer(self.id)
     }
 
+    pub fn unbind(&self) {
+        gl_bind_array_buffer(0);
+    }
+
 }
 
 pub struct VAO {
@@ -276,8 +297,32 @@ impl VAO {
         }
     }
 
+    pub fn set_buffer_layout(&self, buffer: &VertexBuffer) {
+        self.apply();
+        buffer.apply();
+
+        let gl = opengl();
+        for attrib in buffer.layout.iter() {
+            unsafe {
+                gl.VertexAttribPointer(
+                    attrib.buffer_index, attrib.elem_count as i32, 
+                    attrib.dtype as u32, gl::FALSE, attrib.stride as i32, 
+                    attrib.offset as *const _
+                );
+                gl.EnableVertexAttribArray(attrib.buffer_index);
+                gl.VertexAttribDivisor(attrib.buffer_index, if attrib.is_instanced { 1 } else { 0 });
+            }
+        }
+        buffer.unbind();
+        self.unbind();
+    }
+
     pub fn apply(&self) {
         gl_bind_vertex_array(self.id);
+    }
+
+    pub fn unbind(&self) {
+        gl_bind_vertex_array(0);
     }
 }
 
@@ -317,18 +362,8 @@ impl Drop for VAO {
 }
 
 pub fn set_vertex_layout(buffer: &VertexBuffer, attribs: &[VertexAttribute]) {
-    let gl = opengl();
+let gl = opengl();
     buffer.apply();
 
-    for attrib in attribs.iter() {
-        unsafe {
-            gl.VertexAttribPointer(
-                attrib.buffer_index, attrib.elem_count as i32, 
-                attrib.dtype as u32, gl::FALSE, attrib.stride as i32, 
-                attrib.offset as *const _
-            );
-            gl.EnableVertexAttribArray(attrib.buffer_index);
-            gl.VertexAttribDivisor(attrib.buffer_index, if attrib.is_instanced { 1 } else { 0 });
-        }
-    }
+   
 }

@@ -101,29 +101,33 @@ impl Texture {
     pub fn id(&self) -> u32 { self.id }
 
     pub fn apply(&self) {
-        unsafe { opengl().BindTexture(gl::TEXTURE_2D, self.id) }
+        unsafe { 
+            opengl().ActiveTexture(self.unit());
+            opengl().BindTexture(gl::TEXTURE_2D, self.id);
+        }
     }
 }
 
 
 // TODO :: Consolidate these with #ifdefs
-const FRAG_TEMPLATE_VARS: &str = r"#version 330
-    out vec4 FragColor;
-    in vec2 TexCoord;
-    in vec4 Color;
-    in vec3 FragPos;
+const FRAG_TEMPLATE_VARS: &'static [u8] = b"
+#version 330
+out vec4 FragColor;
+in vec2 TexCoord;
+in vec4 Color;
+in vec3 FragPos;
 
-    uniform sampler2D u_texture;
-";
+uniform sampler2D u_texture;
+\0";
 
-const FRAG_TEMPLATE_MAIN: &str = r"
+const FRAG_TEMPLATE_MAIN: &'static [u8] = b"
 void main()
 {
     FragColor = effect(Color, u_texture, TexCoord, FragPos);
 }
-";
+\0";
 
-const VERT_TEMPLATE_DECLS: &str = r"#version 330
+const VERT_TEMPLATE_DECLS: &'static [u8] = b"#version 330
     layout(location = 0) in vec3 l_pos;
     layout(location = 1) in vec2 l_texCoords;
     layout(location = 2) in vec4 l_color;
@@ -135,12 +139,10 @@ const VERT_TEMPLATE_DECLS: &str = r"#version 330
     uniform mat4 u_model;
     uniform mat4 u_view;
     uniform mat4 u_projection;
-    //uniform mat4 u_matrixMVP;
-    //uniform mat4 u_modelMatrix;
-";
+\0";
 
 
-const VERT_TEMPLATE_MAIN: &str = r"
+const VERT_TEMPLATE_MAIN: &'static [u8] = b"
 void main()
 {
     TexCoord = l_texCoords;
@@ -148,11 +150,11 @@ void main()
 
     FragPos = vec3(u_model * vec4(l_pos, 1.0));
 
-    gl_Position = position(u_projection * u_view * u_model, l_pos);
+    gl_Position = position(u_projection * u_view * u_model, vec4(l_pos.x, l_pos.y, l_pos.z, 1.0));
 }
-";
+\0";
 
-const VERT_TEMPLATE_DECLS_INSTANCED: &str = r"#version 330
+const VERT_TEMPLATE_DECLS_INSTANCED: &'static [u8] = b"#version 330
     layout(location = 0) in vec3 l_pos;
     layout(location = 1) in vec2 l_texCoords;
     layout(location = 2) in vec4 l_color;
@@ -163,10 +165,9 @@ const VERT_TEMPLATE_DECLS_INSTANCED: &str = r"#version 330
     out vec4 Color;
     out vec3 FragPos;
     mat4 matrixMVP = l_matrixMVP;
-";
+\0";
 
-
-const DEFAULT_VERT: &str = r"#version 330
+const DEFAULT_VERT: &'static [u8] = b"#version 330
     layout(location = 0) in vec3 l_pos;
     layout(location = 1) in vec2 l_texCoords;
     layout(location = 2) in vec4 l_color;
@@ -187,9 +188,9 @@ const DEFAULT_VERT: &str = r"#version 330
         mat4 mvp = u_projection * u_view * u_model;
         gl_Position = mvp * vec4(l_pos, 1.0);
     }
-";
+\0";
 
-const DEFAULT_INSTANCED_VERT: &str = r"#version 330
+const DEFAULT_INSTANCED_VERT: &'static [u8] = b"#version 330
 layout(location = 0) in vec3 l_pos;
 layout(location = 1) in vec2 l_texCoords;
 layout(location = 2) in vec4 l_color;
@@ -209,9 +210,9 @@ void main()
 
     gl_Position = l_matrixMVP * vec4(l_pos, 1.0);
 }
-";
+\0";
 
-const DEFAULT_FRAG: &str = r"#version 330
+const DEFAULT_FRAG: &'static [u8] = b"#version 330
 out vec4 FragColor;
 
 in vec4 Color;
@@ -221,7 +222,8 @@ uniform sampler2D u_texture;
 void main()
 {
 	FragColor = texture(u_texture, TexCoord) * Color;
-}";
+}
+\0";
 
 #[derive(Debug, Copy, Clone)]
 pub enum ShaderType {
@@ -245,48 +247,48 @@ impl Shader {
         Ok(Shader::new(shaderid, uniforms))
     }
     
-    pub fn from_memory(vert: &str, frag: &str) -> Result<Self, String> {
-        let vshader = gl_compile_shader(vert, ShaderType::Vertex)?;
-        let fshader = gl_compile_shader(frag, ShaderType::Fragment)?;
+    pub fn from_memory<T>(vert: T, frag: T) -> Result<Self, String> where T: Into<Vec<u8>> {
+        let vshader = gl_compile_shader(vert.into().as_slice(), ShaderType::Vertex)?;
+        let fshader = gl_compile_shader(frag.into().as_slice(), ShaderType::Fragment)?;
 
         let id = gl_create_shader_program(vshader, fshader)?;
         let uniforms = gl_get_active_uniforms(id);
         Ok(Shader::new(id, uniforms))
     }
 
-    pub fn from_template(position: &str, effect: &str) -> Result<Self, String> {
+    pub fn from_template(position: &[u8], effect: &[u8]) -> Result<Self, String> {
         let vert_full = Self::concat_shader_sources(VERT_TEMPLATE_DECLS, position, VERT_TEMPLATE_MAIN);
         let frag_full = Self::concat_shader_sources(FRAG_TEMPLATE_VARS, effect, FRAG_TEMPLATE_MAIN);
-        let s = Self::from_memory(&vert_full, &frag_full)?;
+        let s = Self::from_memory(vert_full.as_slice(), frag_full.as_slice())?;
 
         Ok(s)
     }
 
-    pub fn from_vert_template(position: &str) -> Result<Self, String> {
+    pub fn from_vert_template(position: &[u8]) -> Result<Self, String> {
         let vert_full = Shader::concat_shader_sources(VERT_TEMPLATE_DECLS, position, VERT_TEMPLATE_MAIN);
         let frag_full = DEFAULT_FRAG;
-        let s = Shader::from_memory(&vert_full, &frag_full)?;
+        let s = Shader::from_memory(vert_full.as_slice(), frag_full)?;
         Ok(s)
     }
-    pub fn from_frag_template(effect: &str) -> Result<Self, String> {
+    pub fn from_frag_template(effect: &[u8]) -> Result<Self, String> {
         let vert_full = DEFAULT_VERT;
         let frag_full = Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, effect, FRAG_TEMPLATE_MAIN);
-        let s = Shader::from_memory(&vert_full, &frag_full)?;
+        let s = Shader::from_memory(vert_full, frag_full.as_slice())?;
         Ok(s)
     }
     
-    pub fn from_template_instanced<'a, T>(position: T, effect:T) -> Result<Self, String> where T: Into<Option<&'a str>> {
+    pub fn from_template_instanced<'a, T>(position: T, effect:T) -> Result<Self, String> where T: Into<Option<Vec<u8>>> {
         let (position, effect) = (position.into(), effect.into());
         assert!(position.is_some() || effect.is_some(), " Both of the arguments for function from_template_instanced() are None. Please pass at least 1 value with Some");
         let vert_full = match position {
-            Some(s) => Shader::concat_shader_sources(VERT_TEMPLATE_DECLS_INSTANCED, s, VERT_TEMPLATE_MAIN),
-            None => String::from(DEFAULT_INSTANCED_VERT)
+            Some(s) => Shader::concat_shader_sources(VERT_TEMPLATE_DECLS_INSTANCED, s.as_slice(), VERT_TEMPLATE_MAIN),
+            None => DEFAULT_INSTANCED_VERT.into()
         };
         let frag_full = match effect {
-            Some(s) => Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, s, FRAG_TEMPLATE_MAIN),
-            None => String::from(DEFAULT_FRAG)
+            Some(s) => Shader::concat_shader_sources(FRAG_TEMPLATE_VARS, s.as_slice(), FRAG_TEMPLATE_MAIN),
+            None => DEFAULT_FRAG.into()
         };
-        let s = Shader::from_memory(&vert_full, &frag_full)?;
+        let s = Shader::from_memory(vert_full, frag_full)?;
         Ok(s)
     }
 
@@ -345,11 +347,14 @@ impl Shader {
         Shader { id, uniform_locations }
     }
 
-    fn concat_shader_sources(a: &str, b: &str, c: &str) -> String {
+    fn concat_shader_sources<'a, T>(a: T, b: T, c: T) -> Vec<u8> where T: Into<Vec<u8>>{
+        let su = String::from_utf8;
+        let (a, b, c) = (a.into(), b.into(), c.into());
+        let (a, b, c) = (su(a).unwrap(), su(b).unwrap(), su(c).unwrap());
         let mut result = String::from(a);
-        result.push_str(b);
-        result.push_str(c); 
-        result
+        result.push_str(&b);
+        result.push_str(&c); 
+        result.as_bytes().to_vec()
     }
 }
 
