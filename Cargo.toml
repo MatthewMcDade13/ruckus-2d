@@ -11,9 +11,9 @@ repository = "https://github.com/MatthewMcDade13/ruckus-2d"
 name = "ruckus"
 path = "src/ruckus.rs"
 
-[[bin]]
-name = "ruckusbin"
-path = "src/bin.rs"
+# [[bin]]
+# name = "ruckusbin"
+# path = "src/bin.rs"
 
 [dependencies]
 glutin = "0.24"
