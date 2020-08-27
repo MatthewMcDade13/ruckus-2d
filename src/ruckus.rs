@@ -34,7 +34,7 @@ const CLIP_FAR_DEFAULT: f32 = 1000.;
 //     fn height(&self) -> f32;
 // }
 
-pub trait Renderable {
+pub trait Renderable {  
     fn draw(&self, renderer: &Renderer);
 }
 

@@ -55,11 +55,6 @@ macro_rules! memory_offset {
     };
 }
 
-// TODO :: IMPORTANT :: This uhh... kinda works. No fucking clue why renderer shit itself 
-//                      when we try and multiply model matrix with anything other than vertex position in shader... 
-//                      TIME TO START FROM SCRATCH (or at least here https://learnopengl.com/Getting-started/Transformations) and then 
-//                      work our way back to see WTF is going on... ugh... fml... lol
-
 fn main() {
     unsafe {
         let el = EventLoop::new();

@@ -1,6 +1,7 @@
 use crate::vertex::Vertex2D;
 use crate::opengl::*;
 use crate::graphics;
+use crate::sys::Quad;
 use std::mem;
 
 #[derive(Debug, Copy, Clone)]
@@ -184,11 +185,23 @@ pub struct VertexBuffer {
     size_bytes: usize,
     vert_count: u32,
     pub draw_prim: DrawPrimitive,
+    // TODO :: Ideally we should have this vertex attribute layout
+    //         on a VAO, since its entire purpose is to store layout data for buffers... lol
+    //         Move this to VAO
     pub layout: Vec<VertexAttribute>
 }
 
 // TODO :: Make this act like more like an actual buffer (have checks for overflow, ect)
 impl VertexBuffer {
+
+
+    /**
+     * Returns VertexBuffer with default quad verts put into an OpenGL VBO instead of a runtime array
+     */
+    pub fn new_as_quad(useage: DrawUsage) -> Self {
+        Self::new_with_prim(&Quad::default_verts(), useage, DrawPrimitive::TriangleStrip)
+    }
+
     pub fn zeroed<T>(count: u32, usage: DrawUsage, draw_prim: DrawPrimitive) -> Self {
         let type_size = mem::size_of::<T>() as u32;
         let id = gl_gen_buffer();
