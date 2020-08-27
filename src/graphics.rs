@@ -326,14 +326,6 @@ impl Shader {
         self.apply();
         gl_set_uniform_matrix_xpose(self.uniform_locations[name], glm::value_ptr(mat), transpose)
     }
-
-    // TODO :: Make sure getting the uniform names from linked shaders actually
-    //         works before removing register_uniform()
-    pub fn register_uniform(&mut self, name: &str) {
-        let k = String::from(name);
-        let v = gl_get_uniform_location(self.id, name);
-        let _  = self.uniform_locations.insert(k, v);
-    }
     
     pub fn apply(&self) {
         unsafe { opengl().UseProgram(self.id) }

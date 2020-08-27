@@ -219,9 +219,7 @@ pub(crate) fn gl_get_active_uniforms(shader_id: u32) -> HashMap<String, i32> {
             let mut dtype = std::mem::zeroed();
             let mut name = vec![0; NAME_SIZE];
             gl.GetActiveUniform(shader_id, i as u32, NAME_SIZE as i32, &mut length, &mut size, &mut dtype, name.as_mut_ptr() as *mut _);   
-            
-            
-            // TODO :: This is ugly. Fix it. I am sure there is a cleaner Rust way to do this... but I am tired and my will is weak...
+
             let name = unsafe { std::ffi::CStr::from_ptr(name.as_ptr()).to_str().unwrap() };
             let k = String::from(name);
 

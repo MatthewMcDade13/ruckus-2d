@@ -53,7 +53,6 @@ impl ProjectionInfo {
     }
 }
 
-// TODO :: Implement uses for unsued field memebers
 pub struct Renderer {
     pub camera: FlyCamera,
 
@@ -71,6 +70,7 @@ pub struct Renderer {
 
 // TODO :: Implement some type of builder pattern for renderer to pass flags on create,
 //         until then we have no way of modifying renderer defaults outside of cumbersome set_* calls
+// TODO :: Implement Instancing
 impl Renderer {
 
     pub const DEFAULT_FOV: f32 = 45.;
@@ -86,7 +86,6 @@ impl Renderer {
             gl.Enable(gl::BLEND);
             gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         };
-        let viewport = sys::Rect::new(0., 0., width as f32, height as f32);
         let projection_info = ProjectionInfo { 
             width: width as f32, height: height as f32, 
             fov_deg: Self::DEFAULT_FOV, clip_near: 0.1, clip_far: 100. 
@@ -119,6 +118,20 @@ impl Renderer {
         }
     }
 
+    pub fn set_viewport(&mut self, rect: &Rectf) {
+        self.projection_info.width = rect.w;
+        self.projection_info.height = rect.h;
+        self.projection = self.projection_info.to_matrix();
+        unsafe { opengl().Viewport(rect.x as i32, rect.y as i32, rect.w as i32, rect.h as i32) }
+    }
+
+    // NOTE :: Maybe add a way to set near and far clip here as well?
+    pub fn set_projection(&mut self, width: f32, height: f32, fov_deg: f32) {
+        self.projection_info = ProjectionInfo {
+            width, height, fov_deg, ..self.projection_info
+        };
+        self.projection = self.projection_info.to_matrix();
+    }
     
     pub fn begin_draw_texture(rt: &RenderTexture) {
         FrameBuffer::apply(&rt.frame_buffer);
