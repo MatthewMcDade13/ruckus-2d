@@ -38,11 +38,26 @@ pub trait Renderable {
     fn draw(&self, renderer: &Renderer);
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+struct ProjectionInfo {
+    width: f32, height: f32,
+    fov_deg: f32, clip_near: f32, clip_far: f32
+}
+
+impl ProjectionInfo {
+    pub fn aspect(&self) -> f32 { self.width / self.height }
+    pub fn fov_rad(&self) -> f32 { sys::radians(self.fov_deg) }
+
+    pub fn to_matrix(&self) -> glm::Mat4 {
+        glm::perspective(self.aspect(), self.fov_rad(), self.clip_near, self.clip_far)
+    }
+}
+
 // TODO :: Implement uses for unsued field memebers
 pub struct Renderer {
     pub camera: FlyCamera,
 
-    pub draw_vao: VAO,
+    draw_vao: VAO,
     quad_buffer: VertexBuffer,
     instanced_mat_buffer: VertexBuffer,
 
@@ -51,15 +66,14 @@ pub struct Renderer {
     
     default_texture: Texture,
     projection: glm::Mat4,
-    viewport: sys::Rectf,
-
-    attrib2d_instanced: [VertexAttribute; 8]
+    projection_info: ProjectionInfo,
 }
 
 // TODO :: Implement some type of builder pattern for renderer to pass flags on create,
 //         until then we have no way of modifying renderer defaults outside of cumbersome set_* calls
 impl Renderer {
 
+    pub const DEFAULT_FOV: f32 = 45.;
     pub const U_PROJECTION: &'static str = "u_projection";
     pub const U_VIEW: &'static str = "u_view";
     pub const U_MODEL: &'static str = "u_model";
@@ -73,25 +87,18 @@ impl Renderer {
             gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         };
         let viewport = sys::Rect::new(0., 0., width as f32, height as f32);
-        let projection = glm::ortho(viewport.x, viewport.w, viewport.h, viewport.y, CLIP_NEAR_DEFAULT, CLIP_FAR_DEFAULT);
+        let projection_info = ProjectionInfo { 
+            width: width as f32, height: height as f32, 
+            fov_deg: Self::DEFAULT_FOV, clip_near: 0.1, clip_far: 100. 
+        };
+
+        let projection = projection_info.to_matrix();
 
         let camera = { 
             let mut c = FlyCamera::new();
-            c.position.z = 3.;
-            c.look_direction.z = -1.;
+            c.position.z = -3.;
+            c.look_direction.z = 3.;
             c
-        };
-
-        let attrib2d_instanced = {
-            let mat_size = std::mem::size_of::<glm::Mat4>();
-            let v4_size = std::mem::size_of::<glm::Vec4>();
-            let mut attr = [VertexAttribute::default(); 8];
-            
-            for (i, a) in attr.iter_mut().enumerate() {
-                // There are 2 matricies in our instanced vertex shader, so stride is sizeof 2 matricies
-                *a = VertexAttribute { buffer_index: i as u32 + 3, elem_count: 4, dtype: DataType::Float, stride: mat_size * 2, offset: i * v4_size, is_instanced: true }
-            }
-            attr
         };
 
         let shader = Shader::default();
@@ -107,8 +114,8 @@ impl Renderer {
             camera, draw_vao, quad_buffer,
             instanced_mat_buffer, shader, 
             instanced_shader,
-            default_texture, projection, viewport,
-            attrib2d_instanced
+            default_texture, projection,
+            projection_info
         }
     }
 
@@ -250,12 +257,12 @@ impl Renderer {
 
 
 pub struct FlyCamera {
-    position: glm::Vec3,
-    look_direction: glm::Vec3,
-    rotation: glm::Vec3,
+    pub position: glm::Vec3,
+    pub look_direction: glm::Vec3,
+    pub rotation: glm::Vec3,
 
-    speed: f32,
-    sensitivity: f32,
+    pub speed: f32,
+    pub sensitivity: f32,
 }
 
 impl FlyCamera {

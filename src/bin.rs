@@ -25,13 +25,10 @@ layout (location = 2) in vec4 aColor;
 out vec4 PxColor;
 out vec2 TexCoord;
 
-uniform mat4 u_model;
-uniform mat4 u_view;
-uniform mat4 u_projection;
+uniform mat4 u_mvp;
 
 void main() {
-     gl_Position = u_model * vec4(aPos, 1.0);
-    //gl_Position = u_projection * u_view * u_model * vec4(aPos, 1.0);
+    gl_Position = u_mvp * vec4(aPos, 1.0);
     PxColor = aColor;
     TexCoord = aTex;
 }
@@ -86,9 +83,10 @@ fn main() {
         let tex = ruckus::graphics::Texture::from_file("./pepe-the-frog.jpg").unwrap();
         let mut q = ruckus::sys::Quad::default();
 
-        let renderer = ruckus::Renderer::new(800,600);
+        let mut renderer = ruckus::Renderer::new(800,600);
     
         let shader =  Shader::from_memory(VS_SRC, FS_SRC).unwrap();
+
 
         el.run(move |event, _, control_flow| {
             match event {
@@ -107,10 +105,13 @@ fn main() {
                 _ => (),
             }
 
-            let mut transform = glm::Mat4::identity();
-            transform = glm::rotate(&transform, ruckus::sys::radians(-55.), &glm::vec3(0., 0., 1.));
+            let mut model = glm::Mat4::identity();
+            model = glm::rotate(&model, ruckus::sys::radians(90.0), &glm::vec3(0., 0., 1.));
 
-            shader.set_uniform_matrix("u_model", &transform);
+            renderer.camera.position = glm::vec3(4., 3., 3.);            
+            renderer.camera.look_direction = glm::vec3(-4., -3., -3.);            
+            let x = renderer.projection() * renderer.view() * model;
+            shader.set_uniform_matrix("u_mvp", &x);
 
             renderer.clear(0.2, 0.3, 0.3, 1.0);
             shader.apply();
