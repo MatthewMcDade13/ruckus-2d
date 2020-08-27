@@ -10,7 +10,7 @@ use std::collections::HashMap;
 #[allow(unused_imports)]
 use image::{open, DynamicImage};
 
-use image::imageops::flip_vertical;
+use image::imageops::{flip_vertical, flip_vertical_in};
 
 pub trait NumDefault: Num + Default + Copy{}
 impl <T: Num + Default + Copy> NumDefault for T {}
@@ -25,7 +25,7 @@ pub enum TextureFormat {
 pub struct Texture {
     id: u32,
     unit: u32,
-    size: glm::TVec2<u32>
+    pub size: glm::TVec2<u32>
 }
 
 impl Texture {
@@ -36,12 +36,14 @@ impl Texture {
             Ok(d) => d,
             Err(e) => return Err(format!("Error loading file: {} :: ImageError: {}", filename, e))
         };
-        let format = match im {
-            DynamicImage::ImageRgb8(_) => TextureFormat::Rgb,
-            DynamicImage::ImageRgba8(_) => TextureFormat::Rgba,
+        let im = flip_vertical(&im);
+        let layout = im.sample_layout();
+
+        let format = match layout.channels {
+            3 => TextureFormat::Rgb,
+            4 => TextureFormat::Rgba,
             _ => TextureFormat::Alpha
         };
-        let im = flip_vertical(&im);
         let (w, h) = (im.width(), im.height());
 
         let t = Texture::from_memory(im.into_raw(), w, h, format);
@@ -50,31 +52,29 @@ impl Texture {
 
     pub fn from_memory(data: Vec<u8>, w: u32, h: u32, format: TextureFormat) -> Texture {
         let gl = opengl();
-        let mut t = Texture { 
-            id: gl_gen_texture(), 
-            unit: 0, size: glm::vec2(0, 0)
-        };
-        t.apply();
-
+    
+        let tid = gl_gen_texture();
         unsafe {
+            opengl().BindTexture(gl::TEXTURE_2D, tid);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         }
         
-        t.unit = gl::TEXTURE0;
-        t.size = glm::vec2(w,h);
         
         unsafe {
             gl.TexImage2D(gl::TEXTURE_2D, 0, 
-                format as i32, w as i32, h as i32,
-                0, format as u32, gl::UNSIGNED_BYTE, data.as_ptr() as *const _
+                gl::RGBA as i32, w as i32, h as i32,
+                0, gl::RGBA as u32, gl::UNSIGNED_BYTE, data.as_ptr() as *const _
             );
             gl.GenerateMipmap(gl::TEXTURE_2D);
         };
 
-        t
+        Texture { 
+            id: tid, 
+            unit: gl::TEXTURE0, size: glm::vec2(w,h)
+        }
     }
 
     pub fn new_blank() -> Self {
@@ -367,7 +367,7 @@ impl Default for Shader {
 pub struct Mesh {
     pub transform: Transform,
     pub buffer: VertexBuffer,
-    pub indicies: Option<ElementBuffer>,
+    pub indices: Option<ElementBuffer>,
     pub texture: Option<Texture>,
     pub shader: Option<Shader>,
 }
@@ -377,7 +377,7 @@ impl Mesh {
         Self {
             transform: Transform::default(),
             buffer: buffer,
-            indicies: None,
+            indices: None,
             texture: None,
             shader: None,
         }
@@ -387,11 +387,23 @@ impl Mesh {
         Self {
             transform: Transform::default(),
             buffer: VertexBuffer::new(&Quad::default_verts(), usage),
-            indicies: Some(ElementBuffer::new_quad(6)),
+            indices: Some(ElementBuffer::new_quad(6)),
             texture: None,
             shader: None,
 
         }
+    }
+
+    pub fn indices(&self) -> &ElementBuffer {
+        self.indices.as_ref().expect("No Elementbuffer for Mesh")
+    }
+
+    pub fn texture(&self) -> &Texture {
+        self.texture.as_ref().expect("No Texture for Mesh")
+    }
+
+    pub fn shader(&self) -> &Shader {
+        self.shader.as_ref().expect("No Shader for Mesh")
     }
 }
 

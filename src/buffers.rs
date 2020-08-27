@@ -64,11 +64,11 @@ pub struct ElementBuffer {
 }
 
 impl ElementBuffer {
-    pub fn new(indicies: Vec<u32>) -> Self {
+    pub fn new(indicies: &[u32]) -> Self {
         ElementBuffer::new_with_draw(indicies, DrawUsage::Static)
     }
 
-    pub fn new_with_draw(indicies: Vec<u32>, usage: DrawUsage) -> Self {
+    pub fn new_with_draw(indicies: &[u32], usage: DrawUsage) -> Self {
         let eb = ElementBuffer {
             id: gl_gen_buffer(),
             count: indicies.len() as u32
@@ -98,7 +98,7 @@ impl ElementBuffer {
             indicies[quad_index + 5] = vert_index + 5;
         }
 
-        ElementBuffer::new(indicies)
+        ElementBuffer::new(indicies.as_slice())
     }
 
     pub fn apply(&self) {

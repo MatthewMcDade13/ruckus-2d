@@ -16,8 +16,8 @@ use graphics::*;
 use vertex::*;
 use opengl::{opengl, gl};
 
-const CLIP_NEAR_DEFAULT: f32 = -50.;
-const CLIP_FAR_DEFAULT: f32 = 50.;
+const CLIP_NEAR_DEFAULT: f32 = 0.1;
+const CLIP_FAR_DEFAULT: f32 = 1000.;
 
 // pub trait DrawSurface {
 
@@ -77,7 +77,7 @@ impl Renderer {
 
         let camera = { 
             let mut c = FlyCamera::new();
-            c.position.z = 0.;
+            c.position.z = 3.;
             c.look_direction.z = -1.;
             c
         };
@@ -142,7 +142,7 @@ impl Renderer {
         let texture = mesh.texture.as_ref().unwrap_or(&self.default_texture);
         texture.apply();
 
-        if let Some(e) = mesh.indicies.as_ref() {
+        if let Some(e) = mesh.indices.as_ref() {
             self.draw_elements(&e, mesh.buffer.draw_prim);
         } else {
             self.draw_arrays(0, mesh.buffer.vert_count(), mesh.buffer.draw_prim);

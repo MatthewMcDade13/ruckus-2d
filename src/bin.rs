@@ -6,6 +6,7 @@ use ruckus::graphics::*;
 use ruckus::buffers::*;
 use std::ffi::CStr;
 
+use nalgebra_glm as glm;
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::WindowBuilder;
@@ -21,20 +22,32 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTex;
 layout (location = 2) in vec4 aColor;
 
-out vec4 TriColor;
+out vec4 PxColor;
+out vec2 TexCoord;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
 
 void main() {
-    gl_Position = vec4(aPos, 1.0);
-    TriColor = aColor;
+     gl_Position = u_model * vec4(aPos, 1.0);
+    //gl_Position = u_projection * u_view * u_model * vec4(aPos, 1.0);
+    PxColor = aColor;
+    TexCoord = aTex;
 }
 \0";
 
 const FS_SRC: &'static [u8] = b"
 #version 330 core
+
 out vec4 FragColor;
-in vec4 TriColor;
+in vec4 PxColor;
+in vec2 TexCoord;
+
+uniform sampler2D s_texture;
+
 void main() {
-    FragColor = TriColor;
+    FragColor = texture(s_texture, TexCoord) * PxColor;
 }
 \0";
 
@@ -44,6 +57,11 @@ macro_rules! memory_offset {
         unsafe { &((*(0 as *const $ty)).$field) as *const _ as usize }
     };
 }
+
+// TODO :: IMPORTANT :: This uhh... kinda works. No fucking clue why renderer shit itself 
+//                      when we try and multiply model matrix with anything other than vertex position in shader... 
+//                      TIME TO START FROM SCRATCH (or at least here https://learnopengl.com/Getting-started/Transformations) and then 
+//                      work our way back to see WTF is going on... ugh... fml... lol
 
 fn main() {
     unsafe {
@@ -62,25 +80,15 @@ fn main() {
 
 
         load_opengl(|p| windowed_context.get_proc_address(p));
-        let gl = opengl();
         
         // let r = ruckus::Renderer::new(800, 600);
 
-        let vs = {
-            let mut result = [Vertex2D::default(); 3];
-            result[0] = Vertex2D { position: Vert2DPosition { x: -0.5, y: -0.5, z: 0.0 }, color: Vert2DColor { r: 1.0, g: 0., b: 0., a: 1. }, ..Vertex2D::default() };
-            result[1] = Vertex2D { position: Vert2DPosition { x:  0.5, y: -0.5, z: 0.0 }, color: Vert2DColor { r: 0.0, g: 1., b: 0., a: 1. }, ..Vertex2D::default() };
-            result[2] = Vertex2D { position: Vert2DPosition { x:  0.0, y:  0.5, z: 0.0 }, color: Vert2DColor { r: 0.0, g: 0., b: 1., a: 1. },..Vertex2D::default() };
-            result
-        };
-        let vb = ruckus::buffers::VertexBuffer::new(&vs, DrawUsage::Static);
+        let tex = ruckus::graphics::Texture::from_file("./pepe-the-frog.jpg").unwrap();
+        let mut q = ruckus::sys::Quad::default();
 
-
-        let rend = ruckus::Renderer::new(800,600);
+        let renderer = ruckus::Renderer::new(800,600);
     
-        // let mut m = ruckus::graphics::Mesh::new(vb);
-        // m.shader = Shader::from_memory(VS_SRC, FS_SRC).unwrap().into();
-        let shader = Shader::from_memory(VS_SRC, FS_SRC).unwrap();
+        let shader =  Shader::from_memory(VS_SRC, FS_SRC).unwrap();
 
         el.run(move |event, _, control_flow| {
             match event {
@@ -99,9 +107,14 @@ fn main() {
                 _ => (),
             }
 
-            rend.clear(0.2, 0.3, 0.3, 1.0);
+            let mut transform = glm::Mat4::identity();
+            transform = glm::rotate(&transform, ruckus::sys::radians(-55.), &glm::vec3(0., 0., 1.));
+
+            shader.set_uniform_matrix("u_model", &transform);
+
+            renderer.clear(0.2, 0.3, 0.3, 1.0);
             shader.apply();
-            rend.draw_buffer(&vb, 0, None);
+            renderer.draw_quad(&q, &tex);
 
 
             windowed_context.swap_buffers().unwrap();

@@ -79,16 +79,20 @@ pub struct Quad {
 impl Quad {
     pub const fn default_verts() -> [Vertex2D; 4] {
         let mut result = [Vertex2D::new(); 4];
-        result[0] = Vertex2D{ position: Vert2DPosition { x: 0., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 1. }, color: Vert2DColor::white() };
-        result[1] = Vertex2D{ position: Vert2DPosition { x: 0., y: 1., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 0. }, color: Vert2DColor::white() };
-        result[2] = Vertex2D{ position: Vert2DPosition { x: 1., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 1. }, color: Vert2DColor::white() };
-        result[3] = Vertex2D{ position: Vert2DPosition { x: 1., y: 1., z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 0. }, color: Vert2DColor::white() };
+        result[0] = Vertex2D{ position: Vert2DPosition { x: -0.5, y: 0.5, z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 1. }, color: Vert2DColor::white() };
+        result[1] = Vertex2D{ position: Vert2DPosition { x: -0.5, y: -0.5, z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 0. }, color: Vert2DColor::white() };
+        result[2] = Vertex2D{ position: Vert2DPosition { x: 0.5, y: 0.5, z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 1. }, color: Vert2DColor::white() };
+        result[3] = Vertex2D{ position: Vert2DPosition { x: 0.5, y: -0.5, z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 0. }, color: Vert2DColor::white() };
+        // result[0] = Vertex2D{ position: Vert2DPosition { x: 0., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 1. }, color: Vert2DColor::white() };
+        // result[1] = Vertex2D{ position: Vert2DPosition { x: 0., y: 1., z: 0. }, text_coord: Vert2DTextureCoord { u: 0., v: 0. }, color: Vert2DColor::white() };
+        // result[2] = Vertex2D{ position: Vert2DPosition { x: 1., y: 0., z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 1. }, color: Vert2DColor::white() };
+        // result[3] = Vertex2D{ position: Vert2DPosition { x: 1., y: 1., z: 0. }, text_coord: Vert2DTextureCoord { u: 1., v: 0. }, color: Vert2DColor::white() };
         result
     }
 
     pub fn new<T>(pos: glm::Vec2, size: glm::Vec2, rotation_degrees: f32, texture_rect: T) -> Self where T: Into<Option<Rectui>> {
         let mut t = Transform::default();
-        t.translate(pos)
+        t.translate(glm::vec2_to_vec3(&pos))
             .rotate(rotation_degrees)
             .scale(size);
 
@@ -134,14 +138,12 @@ impl Transform {
         Transform(*mat)
     }
  
-    pub fn translate<T>(&mut self, offset: T) -> &mut Self  where T: Into<glm::Vec2> {
-        let offset: glm::Vec2 = offset.into();
+    pub fn translate(&mut self, offset: glm::Vec3) -> &mut Self {
         self.0 = self.0 * Transform::from_position(offset).model();
         self
     }
 
-    pub fn scale<T>(&mut self, scale: T) -> &mut Self where T: Into<glm::Vec2> {
-        let scale = scale.into();
+    pub fn scale(&mut self, scale: glm::Vec2) -> &mut Self {
         self.0 = self.0 * Transform::from_scale(scale).model();
         self
     }
@@ -155,18 +157,18 @@ impl Transform {
      * Rotates transform from offset of top left corner
      */
     pub fn rotate_offset(&mut self, angle_degrees: f32, offset: glm::Vec2) -> &mut Self { 
-        self.translate(offset)
+        self.translate(glm::vec2_to_vec3(&offset))
             .rotate(angle_degrees)
-            .translate(-offset)
+            .translate(glm::vec2_to_vec3(&-offset))
     }
 
-    pub fn from_position<T>(position: T) -> Self where T: Into<glm::Vec2> {
+    pub fn from_position<T>(position: T) -> Self where T: Into<glm::Vec3> {
         let position = position.into();
-        let (x, y) = (position.x, position.y);
+        let (x, y, z) = (position.x, position.y, position.z);
         let model = glm::mat4(
             1., 0., 0., x,
             0., 1., 0., y,
-            0., 0., 1., 0.,
+            0., 0., 1., z,
             0., 0., 0., 1.
         );
         Transform(model)
