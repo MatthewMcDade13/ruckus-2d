@@ -19,21 +19,6 @@ use opengl::{opengl, gl};
 const CLIP_NEAR_DEFAULT: f32 = 0.1;
 const CLIP_FAR_DEFAULT: f32 = 1000.;
 
-// pub trait DrawSurface {
-
-//     fn swap_buffers(&self);
-
-//     fn clear(&self, color: &glm::Vec4) {
-//         unsafe {
-//             opengl().ClearColor(color.x, color.y, color.z, color.w);
-//             opengl().Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-//         }
-//     }
-
-//     fn width(&self) -> f32;
-//     fn height(&self) -> f32;
-// }
-
 pub trait Renderable {  
     fn draw(&self, renderer: &Renderer);
 }
@@ -191,25 +176,6 @@ impl Renderer {
         // gl_unbind_array_buffer();
     }
 
-    /** 
-     * Draws given buffer without any kind of vertex transformation
-    // */
-    // pub fn draw_buffer_static<'b, T>(&self, buffer: &VertexBuffer, first_vertex: u32, texture: T) where T: Into<Option<&'b Texture>> {
-    //     let texture = texture.into().unwrap_or(&self.default_texture);
-    //     texture.apply();
-
-    //     self.shader.set_uniform_matrix("u_projection", &glm::Mat4::identity());
-    //     self.shader.set_uniform_matrix("u_view", &glm::Mat4::identity());
-    //     self.shader.set_uniform_matrix("u_model", &glm::Mat4::identity());
-
-    //     self.draw_vao.set_buffer_layout(&buffer);
-
-    //     gl_draw_arrays(first_vertex, buffer.vert_count(), buffer.draw_prim);
-    //     // gl_unbind_array_buffer();
-    // }
-    /** 
-     * Draws given buffer without any kind of vertex transformation
-    */
     pub fn draw_indexed_buffer<'b, T>(&self, buffer: &VertexBuffer, ebo: &ElementBuffer, texture: T) where T: Into<Option<&'b Texture>> {
         let texture = texture.into().unwrap_or(&self.default_texture);
         texture.apply();
