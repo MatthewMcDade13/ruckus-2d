@@ -1,20 +1,14 @@
 
-use kira::instance::InstanceSettings;
-use kira::sound::SoundSettings;
-use kira::manager::AudioManagerSettings;
-use glutin::PossiblyCurrent;
 use ruckus::opengl::*;
 use ruckus::vertex::*;
 use ruckus::graphics::*;
 use ruckus::buffers::*;
-use std::ffi::CStr;
 
 use nalgebra_glm as glm;
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::WindowBuilder;
 use glutin::ContextBuilder;
-use kira::manager::{AudioManager};
 
 
 fn main() {
