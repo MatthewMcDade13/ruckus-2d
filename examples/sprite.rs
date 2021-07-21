@@ -1,4 +1,7 @@
 
+use kira::instance::InstanceSettings;
+use kira::sound::SoundSettings;
+use kira::manager::AudioManagerSettings;
 use glutin::PossiblyCurrent;
 use ruckus::opengl::*;
 use ruckus::vertex::*;
@@ -11,6 +14,7 @@ use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::WindowBuilder;
 use glutin::ContextBuilder;
+use kira::manager::{AudioManager};
 
 const SCR_WIDTH: u32 = 800;
 const SCR_HEIGHT: u32 = 600;
@@ -55,10 +59,18 @@ macro_rules! memory_offset {
     };
 }
 
-fn main() {
+
+fn load_audio_manager() -> Result<AudioManager, kira::manager::error::SetupError>{
+    let audio_manager = AudioManager::new(AudioManagerSettings::default())?;
+
+    Ok(audio_manager)
+}
+
+fn main() -> Result<(), ()> {
     unsafe {
         let el = EventLoop::new();
         let wb = WindowBuilder::new().with_title("A fantastic window!");
+        
     
         let windowed_context =
             ContextBuilder::new()
@@ -71,6 +83,9 @@ fn main() {
         let windowed_context = unsafe { windowed_context.make_current().unwrap() };
 
 
+        let mut audio = load_audio_manager().unwrap();
+        let mut sound_handle = audio.load_sound("./rainy_village_8_bit_lofi.mp3", SoundSettings::default()).unwrap();
+        let _ = sound_handle.play(InstanceSettings::default());
         load_opengl(|p| windowed_context.get_proc_address(p));
         
         // let r = ruckus::Renderer::new(800, 600);
